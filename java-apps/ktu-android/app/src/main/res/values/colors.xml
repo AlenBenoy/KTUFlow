@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- KTU Scholar dark navy + amber palette -->
+    <color name="bg_primary">#0A1628</color>
+    <color name="bg_card">#12213A</color>
+    <color name="bg_sidebar">#0D1E35</color>
+    <color name="border">#1E3A5F</color>
+    <color name="accent">#F59E0B</color>
+    <color name="fg_primary">#F0F4FF</color>
+    <color name="fg_muted">#8BA3C7</color>
+    <color name="success">#34D399</color>
+    <color name="warning">#FBBF24</color>
+    <color name="danger">#EF4444</color>
+    <color name="blue">#3B82F6</color>
+    <color name="condonation">#FF6B35</color>
+    <!-- Material theme overrides -->
+    <color name="colorPrimary">#F59E0B</color>
+    <color name="colorPrimaryDark">#0D1E35</color>
+    <color name="colorAccent">#F59E0B</color>
+    <color name="colorSurface">#12213A</color>
+    <color name="colorBackground">#0A1628</color>
+    <color name="colorOnSurface">#F0F4FF</color>
+    <color name="colorOnBackground">#F0F4FF</color>
+</resources>

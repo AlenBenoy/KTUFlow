@@ -1,0 +1,17 @@
+dependencies {
+    // SQLite JDBC driver (desktop only — Android has it built-in)
+    implementation 'org.xerial:sqlite-jdbc:3.45.3.0'
+
+    // HTTP client for KTU portal and EzyGo
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // HTML parsing for KTU announcements / results
+    implementation 'org.jsoup:jsoup:1.18.1'
+
+    // JSON parsing
+    implementation 'com.google.code.gson:gson:2.11.0'
+
+    // SLF4J logging (simple backend for desktop; Android uses Log)
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
+}

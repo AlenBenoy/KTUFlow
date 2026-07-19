@@ -1,0 +1,20 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+    repositories {
+        mavenCentral()
+        google()
+    }
+}
+
+rootProject.name = "ktu-scholar"
+include(":ktu-core")
+include(":ktu-desktop")
+// Android is a separate Android Studio project under ktu-android/

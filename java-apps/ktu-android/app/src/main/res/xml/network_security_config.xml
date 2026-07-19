@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Allows HTTPS to KTU portal and EzyGo.
+  Cleartext HTTP is disabled everywhere (android:usesCleartextTraffic="false" in manifest).
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">app.ktu.edu.in</domain>
+        <domain includeSubdomains="true">edu.ezygo.app</domain>
+        <domain includeSubdomains="true">www.ktunotes.in</domain>
+        <domain includeSubdomains="true">ktuspecial.in</domain>
+    </domain-config>
+</network-security-config>

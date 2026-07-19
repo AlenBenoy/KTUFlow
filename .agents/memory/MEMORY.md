@@ -1,0 +1,1 @@
+- [Java KTU Scholar structure](java-ktu-scholar.md) — multi-module Gradle project in java-apps/; ktu-core is a shared JAR used by both desktop and Android.

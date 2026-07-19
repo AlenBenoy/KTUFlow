@@ -1,0 +1,23 @@
+// Root build file — shared config for all subprojects
+plugins {
+    id 'java' apply false
+    id 'com.github.johnrengelman.shadow' version '8.1.1' apply false
+}
+
+allprojects {
+    group = 'com.ktu.scholar'
+    version = '1.0.0'
+}
+
+subprojects {
+    apply plugin: 'java'
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    repositories {
+        mavenCentral()
+    }
+}

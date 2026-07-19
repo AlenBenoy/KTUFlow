@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.KtuScholar" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@color/bg_primary</item>
+        <item name="colorSurface">@color/colorSurface</item>
+        <item name="colorOnSurface">@color/fg_primary</item>
+        <item name="android:statusBarColor">@color/bg_sidebar</item>
+        <item name="android:navigationBarColor">@color/bg_sidebar</item>
+        <!-- Remove title bar — use custom toolbars -->
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <style name="Theme.KtuScholar.Splash" parent="Theme.KtuScholar">
+        <item name="android:windowBackground">@color/bg_primary</item>
+        <item name="android:windowIsTranslucent">false</item>
+    </style>
+
+    <!-- Bottom navigation dark overrides -->
+    <style name="KtuBottomNav" parent="Widget.MaterialComponents.BottomNavigationView">
+        <item name="android:background">@color/bg_sidebar</item>
+        <item name="itemIconTint">@drawable/nav_item_color</item>
+        <item name="itemTextColor">@drawable/nav_item_color</item>
+    </style>
+
+</resources>

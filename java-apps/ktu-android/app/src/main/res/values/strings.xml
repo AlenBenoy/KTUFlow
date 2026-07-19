@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KTU Scholar</string>
+    <string name="nav_dashboard">Home</string>
+    <string name="nav_results">Results</string>
+    <string name="nav_attendance">Attendance</string>
+    <string name="nav_tasks">Tasks</string>
+    <string name="nav_more">More</string>
+</resources>

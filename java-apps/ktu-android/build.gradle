@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.ktu.scholar'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.ktu.scholar"
+        minSdk 26           // Android 8.0 — covers 95%+ of active devices
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    // AndroidX core
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+
+    // Navigation component
+    implementation 'androidx.navigation:navigation-fragment:2.7.7'
+    implementation 'androidx.navigation:navigation-ui:2.7.7'
+
+    // Room (SQLite ORM for Android)
+    implementation 'androidx.room:room-runtime:2.6.1'
+    annotationProcessor 'androidx.room:room-compiler:2.6.1'
+
+    // HTTP + JSON (mirrors ktu-core)
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.google.code.gson:gson:2.11.0'
+    implementation 'org.jsoup:jsoup:1.18.1'
+
+    // Work manager (background sync)
+    implementation 'androidx.work:work-runtime:2.9.0'
+
+    // Shared KTU Core — copy the ktu-core JAR into app/libs/
+    // After building ktu-core with: ../gradlew :ktu-core:jar
+    // Copy ktu-core/build/libs/ktu-core.jar -> ktu-android/app/libs/
+    implementation fileTree(dir: 'app/libs', include: ['*.jar'])
+}
