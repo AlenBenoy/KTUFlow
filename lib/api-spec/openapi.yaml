@@ -3,20 +3,36 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: KTU Student Productivity API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: profile
+    description: Student profile and credentials
+  - name: results
+    description: KTU academic results
+  - name: attendance
+    description: Attendance tracking and analysis
+  - name: announcements
+    description: KTU announcements and notifications
+  - name: todos
+    description: To-do list management
+  - name: focus
+    description: Focus mode settings
+  - name: grades
+    description: Grade and GPA calculation
+  - name: materials
+    description: Study materials
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +40,380 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── Profile ───────────────────────────────────────────────────────────────
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [profile]
+      summary: Get stored student profile
+      responses:
+        "200":
+          description: Profile found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "404":
+          description: No profile found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: saveProfile
+      tags: [profile]
+      summary: Save or update student profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileInput"
+      responses:
+        "200":
+          description: Profile saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+
+  # ─── KTU Results ───────────────────────────────────────────────────────────
+  /results:
+    get:
+      operationId: getResults
+      tags: [results]
+      summary: Get cached KTU results
+      responses:
+        "200":
+          description: Results fetched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultsResponse"
+        "404":
+          description: No results cached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /results/sync:
+    post:
+      operationId: syncResults
+      tags: [results]
+      summary: Fetch fresh results from KTU portal using stored credentials
+      responses:
+        "200":
+          description: Results synced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultsResponse"
+        "400":
+          description: Credentials missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: KTU portal unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /results/gpa:
+    get:
+      operationId: getGpaSummary
+      tags: [results]
+      summary: Get GPA summary and CGPA from cached results
+      responses:
+        "200":
+          description: GPA summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GpaSummary"
+
+  # ─── Attendance ────────────────────────────────────────────────────────────
+  /attendance:
+    get:
+      operationId: getAttendance
+      tags: [attendance]
+      summary: Get cached attendance records
+      responses:
+        "200":
+          description: Attendance data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceResponse"
+
+  /attendance/sync:
+    post:
+      operationId: syncAttendance
+      tags: [attendance]
+      summary: Sync attendance from EzyGo using stored credentials
+      responses:
+        "200":
+          description: Attendance synced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceResponse"
+        "400":
+          description: EzyGo credentials missing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: EzyGo unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /attendance/analysis:
+    get:
+      operationId: getAttendanceAnalysis
+      tags: [attendance]
+      summary: Get attendance analysis with recommendations for minimum 75% requirement
+      responses:
+        "200":
+          description: Analysis with recommendations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceAnalysis"
+
+  # ─── Grades ────────────────────────────────────────────────────────────────
+  /grades/calculate:
+    post:
+      operationId: calculateGpa
+      tags: [grades]
+      summary: Calculate GPA/CGPA from subject grades (KTU 2024 scheme)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GradeCalculationInput"
+      responses:
+        "200":
+          description: GPA calculated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GradeCalculationResult"
+
+  /grades/scheme:
+    get:
+      operationId: getGradingScheme
+      tags: [grades]
+      summary: Get KTU 2024 grading scheme reference table
+      responses:
+        "200":
+          description: Grading scheme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GradingScheme"
+
+  # ─── Announcements ─────────────────────────────────────────────────────────
+  /announcements:
+    get:
+      operationId: getAnnouncements
+      tags: [announcements]
+      summary: Get KTU announcements (scraped from official portal)
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [all, exam, result, academic, general]
+            default: all
+      responses:
+        "200":
+          description: Announcements list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnouncementsResponse"
+
+  /announcements/sync:
+    post:
+      operationId: syncAnnouncements
+      tags: [announcements]
+      summary: Fetch latest announcements from KTU portal
+      responses:
+        "200":
+          description: Announcements synced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnouncementsResponse"
+
+  # ─── To-Do ─────────────────────────────────────────────────────────────────
+  /todos:
+    get:
+      operationId: getTodos
+      tags: [todos]
+      summary: Get all to-do items
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [all, pending, completed]
+            default: all
+      responses:
+        "200":
+          description: To-do list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodosResponse"
+    post:
+      operationId: createTodo
+      tags: [todos]
+      summary: Create a new to-do item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TodoInput"
+      responses:
+        "201":
+          description: Todo created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Todo"
+
+  /todos/{id}:
+    put:
+      operationId: updateTodo
+      tags: [todos]
+      summary: Update a to-do item
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TodoUpdate"
+      responses:
+        "200":
+          description: Todo updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Todo"
+        "404":
+          description: Todo not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteTodo
+      tags: [todos]
+      summary: Delete a to-do item
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Todo deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Todo not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── Focus Mode ────────────────────────────────────────────────────────────
+  /focus:
+    get:
+      operationId: getFocusSettings
+      tags: [focus]
+      summary: Get focus mode settings
+      responses:
+        "200":
+          description: Focus settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FocusSettings"
+    put:
+      operationId: updateFocusSettings
+      tags: [focus]
+      summary: Update focus mode settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FocusSettingsInput"
+      responses:
+        "200":
+          description: Focus settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FocusSettings"
+
+  # ─── Study Materials ───────────────────────────────────────────────────────
+  /materials:
+    get:
+      operationId: getMaterials
+      tags: [materials]
+      summary: Get study materials from linked sites
+      parameters:
+        - in: query
+          name: semester
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 8
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [all, notes, pyq]
+            default: all
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Study materials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialsResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +421,531 @@ components:
       properties:
         status:
           type: string
+      required: [status]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error, message]
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success, message]
+
+    # ── Profile ──
+    Profile:
+      type: object
+      properties:
+        id:
+          type: string
+        registerNumber:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        dateOfBirth:
+          type: string
+        branch:
+          type: string
+        semester:
+          type: integer
+        college:
+          type: string
+        hasKtuCredentials:
+          type: boolean
+        hasEzygoCredentials:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
       required:
+        - id
+        - registerNumber
+        - hasKtuCredentials
+        - hasEzygoCredentials
+
+    ProfileInput:
+      type: object
+      properties:
+        registerNumber:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        dateOfBirth:
+          type: string
+        branch:
+          type: string
+        semester:
+          type: integer
+        college:
+          type: string
+        ktuPassword:
+          type: string
+        ezygoPassword:
+          type: string
+      required: [registerNumber]
+
+    # ── Results ──
+    SubjectResult:
+      type: object
+      properties:
+        subjectCode:
+          type: string
+        subjectName:
+          type: string
+        credits:
+          type: number
+        grade:
+          type: string
+        gradePoint:
+          type: number
+        internalMarks:
+          type: number
+        externalMarks:
+          type: number
+        totalMarks:
+          type: number
+        result:
+          type: string
+          enum: [PASS, FAIL, ABSENT, WITHHELD]
+      required: [subjectCode, subjectName, grade, result]
+
+    SemesterResult:
+      type: object
+      properties:
+        semester:
+          type: integer
+        sgpa:
+          type: number
+        cgpa:
+          type: number
+        totalCredits:
+          type: number
+        earnedCredits:
+          type: number
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectResult"
+      required: [semester, subjects]
+
+    ResultsResponse:
+      type: object
+      properties:
+        registerNumber:
+          type: string
+        studentName:
+          type: string
+        semesters:
+          type: array
+          items:
+            $ref: "#/components/schemas/SemesterResult"
+        latestCgpa:
+          type: number
+        syncedAt:
+          type: string
+      required: [registerNumber, semesters]
+
+    GpaSummary:
+      type: object
+      properties:
+        cgpa:
+          type: number
+        semesterWise:
+          type: array
+          items:
+            type: object
+            properties:
+              semester:
+                type: integer
+              sgpa:
+                type: number
+            required: [semester, sgpa]
+        percentageEquivalent:
+          type: number
+        classification:
+          type: string
+      required: [cgpa, semesterWise, percentageEquivalent, classification]
+
+    # ── Attendance ──
+    SubjectAttendance:
+      type: object
+      properties:
+        subjectCode:
+          type: string
+        subjectName:
+          type: string
+        totalClasses:
+          type: integer
+        attendedClasses:
+          type: integer
+        percentage:
+          type: number
+        status:
+          type: string
+          enum: [safe, warning, danger, condonation]
+        classesNeeded:
+          type: integer
+        classesCanSkip:
+          type: integer
+      required:
+        - subjectCode
+        - subjectName
+        - totalClasses
+        - attendedClasses
+        - percentage
         - status
 
+    AttendanceResponse:
+      type: object
+      properties:
+        semester:
+          type: integer
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectAttendance"
+        overallPercentage:
+          type: number
+        syncedAt:
+          type: string
+      required: [subjects, overallPercentage]
+
+    AttendanceRecommendation:
+      type: object
+      properties:
+        subjectCode:
+          type: string
+        subjectName:
+          type: string
+        currentPercentage:
+          type: number
+        requiredPercentage:
+          type: number
+        status:
+          type: string
+          enum: [safe, warning, danger, condonation]
+        recommendation:
+          type: string
+        classesNeeded:
+          type: integer
+        condonationSteps:
+          type: array
+          items:
+            type: string
+      required:
+        - subjectCode
+        - subjectName
+        - currentPercentage
+        - status
+        - recommendation
+
+    AttendanceAnalysis:
+      type: object
+      properties:
+        overallStatus:
+          type: string
+          enum: [safe, warning, danger]
+        overallPercentage:
+          type: number
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceRecommendation"
+        summary:
+          type: string
+      required: [overallStatus, overallPercentage, subjects, summary]
+
+    # ── Grades ──
+    SubjectGradeInput:
+      type: object
+      properties:
+        subjectCode:
+          type: string
+        subjectName:
+          type: string
+        credits:
+          type: number
+        grade:
+          type: string
+      required: [credits, grade]
+
+    GradeCalculationInput:
+      type: object
+      properties:
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectGradeInput"
+      required: [subjects]
+
+    GradeCalculationResult:
+      type: object
+      properties:
+        sgpa:
+          type: number
+        totalCredits:
+          type: number
+        earnedCredits:
+          type: number
+        percentage:
+          type: number
+        classification:
+          type: string
+        subjectBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              subjectCode:
+                type: string
+              subjectName:
+                type: string
+              credits:
+                type: number
+              grade:
+                type: string
+              gradePoint:
+                type: number
+              gradePoints:
+                type: number
+            required: [credits, grade, gradePoint, gradePoints]
+      required: [sgpa, totalCredits, earnedCredits, percentage, classification, subjectBreakdown]
+
+    GradeEntry:
+      type: object
+      properties:
+        grade:
+          type: string
+        gradePoint:
+          type: number
+        percentageRange:
+          type: string
+        description:
+          type: string
+      required: [grade, gradePoint, percentageRange, description]
+
+    GradingScheme:
+      type: object
+      properties:
+        scheme:
+          type: string
+        grades:
+          type: array
+          items:
+            $ref: "#/components/schemas/GradeEntry"
+        formula:
+          type: string
+        note:
+          type: string
+      required: [scheme, grades, formula]
+
+    # ── Announcements ──
+    Announcement:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        category:
+          type: string
+          enum: [exam, result, academic, general]
+        date:
+          type: string
+        link:
+          type: string
+        isNew:
+          type: boolean
+      required: [id, title, category, date]
+
+    AnnouncementsResponse:
+      type: object
+      properties:
+        announcements:
+          type: array
+          items:
+            $ref: "#/components/schemas/Announcement"
+        syncedAt:
+          type: string
+        total:
+          type: integer
+      required: [announcements, total]
+
+    # ── To-Do ──
+    Todo:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        dueDate:
+          type: string
+        completed:
+          type: boolean
+        priority:
+          type: string
+          enum: [low, medium, high]
+        category:
+          type: string
+          enum: [assignment, exam, project, personal, other]
+        reminderTime:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, title, completed, priority, category, createdAt]
+
+    TodoInput:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        dueDate:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high]
+        category:
+          type: string
+          enum: [assignment, exam, project, personal, other]
+        reminderTime:
+          type: string
+      required: [title, priority, category]
+
+    TodoUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        dueDate:
+          type: string
+        completed:
+          type: boolean
+        priority:
+          type: string
+          enum: [low, medium, high]
+        category:
+          type: string
+          enum: [assignment, exam, project, personal, other]
+        reminderTime:
+          type: string
+
+    TodosResponse:
+      type: object
+      properties:
+        todos:
+          type: array
+          items:
+            $ref: "#/components/schemas/Todo"
+        total:
+          type: integer
+        pending:
+          type: integer
+        completed:
+          type: integer
+      required: [todos, total, pending, completed]
+
+    # ── Focus Mode ──
+    FocusSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        cooldownMinutes:
+          type: integer
+          default: 30
+        blockedApps:
+          type: array
+          items:
+            type: string
+        blockedWebsites:
+          type: array
+          items:
+            type: string
+        sessionDurationMinutes:
+          type: integer
+        updatedAt:
+          type: string
+      required: [enabled, cooldownMinutes, blockedApps, blockedWebsites]
+
+    FocusSettingsInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        cooldownMinutes:
+          type: integer
+        blockedApps:
+          type: array
+          items:
+            type: string
+        blockedWebsites:
+          type: array
+          items:
+            type: string
+        sessionDurationMinutes:
+          type: integer
+
+    # ── Study Materials ──
+    StudyMaterial:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        subjectCode:
+          type: string
+        subjectName:
+          type: string
+        semester:
+          type: integer
+        type:
+          type: string
+          enum: [notes, pyq]
+        url:
+          type: string
+        source:
+          type: string
+        description:
+          type: string
+      required: [id, title, type, url, source]
+
+    MaterialsResponse:
+      type: object
+      properties:
+        materials:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudyMaterial"
+        total:
+          type: integer
+        sources:
+          type: array
+          items:
+            type: string
+      required: [materials, total, sources]
