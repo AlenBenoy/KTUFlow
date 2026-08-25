@@ -38,8 +38,8 @@ public class AnnouncementService {
         try {
             return scrapeAnnouncements();
         } catch (Exception e) {
-            log.warn("Announcement scrape failed: {}. Returning demo data.", e.getMessage());
-            return demoAnnouncements();
+            log.warn("Announcement scrape failed: {}", e.getMessage());
+            throw new RuntimeException("KTU announcements could not be fetched", e);
         }
     }
 

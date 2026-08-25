@@ -63,7 +63,11 @@ async function fetchKtuResults(registerNumber: string, password: string) {
     headers: { Cookie: authedCookies },
   });
 
-  return parseResultsHtml(resultsPage.data as string);
+  const parsed = parseResultsHtml(resultsPage.data as string);
+  if (parsed.length === 0) {
+    throw new Error("KTU results page contained no readable rows");
+  }
+  return parsed;
 }
 
 function parseResultsHtml(html: string) {
@@ -93,7 +97,9 @@ function parseResultsHtml(html: string) {
     if (rows.length < 2) return;
 
     const semesterSubjects: typeof semesters[0]["subjects"] = [];
-    let semesterNum = semesters.length + 1;
+    const sectionText = $(table).parent().text() + " " + $(table).prevAll().slice(0, 3).text();
+    const semesterMatch = sectionText.match(/semester\s*[-:]?\s*(\d+)/i);
+    let semesterNum = semesterMatch ? Number(semesterMatch[1]) : semesters.length + 1;
     let sgpa: number | undefined;
 
     rows.each((_j, row) => {
@@ -103,11 +109,17 @@ function parseResultsHtml(html: string) {
         const name = $(cells[1]).text().trim();
         const grade = $(cells[cells.length - 1]).text().trim().toUpperCase();
 
-        if (code.length > 2 && name.length > 2 && grade in GRADE_POINTS) {
+        const creditCell = cells.toArray()
+          .slice(2, -1)
+          .map((cell) => Number($(cell).text().trim()))
+          .find((value) => Number.isFinite(value) && value > 0 && value <= 10);
+
+        if (code.length > 2 && name.length > 2 && grade in GRADE_POINTS && creditCell !== undefined) {
           semesterSubjects.push({
             subjectCode: code,
             subjectName: name,
             grade,
+            credits: creditCell,
             gradePoint: GRADE_POINTS[grade] ?? 0,
             result: (GRADE_POINTS[grade] ?? 0) >= 4 ? "PASS" : "FAIL",
           });
@@ -128,7 +140,10 @@ function computeGpa(semesters: ReturnType<typeof parseResultsHtml>) {
     let totalPoints = 0;
     let totalCredits = 0;
     const subjects = sem.subjects.map((s) => {
-      const credits = s.credits || 4;
+      if (!s.credits || s.credits <= 0) {
+        throw new Error(`KTU result row ${s.subjectCode} has no valid credits`);
+      }
+      const credits = s.credits;
       const gp = s.gradePoint ?? GRADE_POINTS[s.grade] ?? 0;
       totalPoints += credits * gp;
       totalCredits += credits;
@@ -173,46 +188,29 @@ router.post("/results/sync", async (req, res) => {
       semesters = await fetchKtuResults(creds.registerNumber, creds.ktuPassword);
       semesters = computeGpa(semesters);
     } catch (scrapeErr) {
-      req.log.warn({ scrapeErr }, "KTU portal scrape failed — returning demo data");
-      // Demo data for offline/dev mode
-      semesters = [
-        {
-          semester: 1,
-          sgpa: 8.2,
-          cgpa: 8.2,
-          totalCredits: 24,
-          earnedCredits: 24,
-          subjects: [
-            { subjectCode: "MAT101", subjectName: "Calculus and its Applications", credits: 4, grade: "B+", gradePoint: 8, result: "PASS", internalMarks: 38, externalMarks: 62, totalMarks: 80 },
-            { subjectCode: "PHT110", subjectName: "Engineering Physics", credits: 4, grade: "A", gradePoint: 8.5, result: "PASS", internalMarks: 40, externalMarks: 65, totalMarks: 82 },
-            { subjectCode: "CYT110", subjectName: "Engineering Chemistry", credits: 4, grade: "B+", gradePoint: 8, result: "PASS", internalMarks: 35, externalMarks: 55, totalMarks: 78 },
-            { subjectCode: "EST110", subjectName: "Engineering Mechanics", credits: 4, grade: "B", gradePoint: 7, result: "PASS", internalMarks: 32, externalMarks: 50, totalMarks: 72 },
-            { subjectCode: "HUT110", subjectName: "Life Skills", credits: 2, grade: "A+", gradePoint: 9, result: "PASS", internalMarks: 20, externalMarks: 70, totalMarks: 88 },
-            { subjectCode: "EST120", subjectName: "Basics of Civil & Mechanical Engineering", credits: 3, grade: "S", gradePoint: 10, result: "PASS", internalMarks: 45, externalMarks: 75, totalMarks: 92 },
-          ],
-        },
-        {
-          semester: 2,
-          sgpa: 7.9,
-          cgpa: 8.05,
-          totalCredits: 24,
-          earnedCredits: 24,
-          subjects: [
-            { subjectCode: "MAT102", subjectName: "Vector Calculus, Differential Equations", credits: 4, grade: "B+", gradePoint: 8, result: "PASS", internalMarks: 36, externalMarks: 58, totalMarks: 77 },
-            { subjectCode: "PHT120", subjectName: "Engineering Physics Lab", credits: 2, grade: "A+", gradePoint: 9, result: "PASS", internalMarks: 22, externalMarks: 68, totalMarks: 87 },
-            { subjectCode: "EST130", subjectName: "Basics of Electrical & Electronics Engineering", credits: 4, grade: "B", gradePoint: 7, result: "PASS", internalMarks: 30, externalMarks: 48, totalMarks: 71 },
-            { subjectCode: "EST140", subjectName: "Basic Electronics & Communication Engineering", credits: 4, grade: "B+", gradePoint: 8, result: "PASS", internalMarks: 37, externalMarks: 57, totalMarks: 76 },
-            { subjectCode: "CST102", subjectName: "Problem Solving using Python", credits: 4, grade: "A", gradePoint: 8.5, result: "PASS", internalMarks: 42, externalMarks: 63, totalMarks: 81 },
-          ],
-        },
-      ];
+      req.log.warn({ scrapeErr }, "KTU portal scrape failed");
+      res.status(502).json({
+        error: "portal_unavailable",
+        message: "KTU results could not be fetched. No sample results were used.",
+      });
+      return;
     }
 
-    const latestCgpa = semesters[semesters.length - 1]?.cgpa ?? semesters[semesters.length - 1]?.sgpa ?? 0;
+    if (semesters.length === 0) {
+      res.status(502).json({
+        error: "results_unreadable",
+        message: "KTU returned no readable result rows. No sample results were used.",
+      });
+      return;
+    }
+
+    const latestCgpa = semesters[semesters.length - 1]?.cgpa ??
+      semesters.reduce((sum, semester) => sum + (semester.sgpa ?? 0) * (semester.totalCredits ?? 0), 0) /
+      Math.max(1, semesters.reduce((sum, semester) => sum + (semester.totalCredits ?? 0), 0));
 
     const responseData = {
       registerNumber: creds.registerNumber,
-      studentName: "Student",
+      studentName: "",
       semesters,
       latestCgpa,
       syncedAt: new Date().toISOString(),
@@ -250,9 +248,12 @@ router.get("/results/gpa", async (req, res) => {
       res.status(404).json({ error: "not_found", message: "No results cached. Please sync first." });
       return;
     }
-    const data = rows[0]!.data as { semesters?: Array<{ semester: number; sgpa?: number; cgpa?: number }> };
+    const data = rows[0]!.data as {
+      semesters?: Array<{ semester: number; sgpa?: number; cgpa?: number; totalCredits?: number }>;
+    };
     const semesters = data.semesters ?? [];
-    const cgpa = semesters[semesters.length - 1]?.cgpa ?? semesters[semesters.length - 1]?.sgpa ?? 0;
+    const cgpa = semesters.reduce((sum, semester) => sum + (semester.sgpa ?? 0) * (semester.totalCredits ?? 0), 0) /
+      Math.max(1, semesters.reduce((sum, semester) => sum + (semester.totalCredits ?? 0), 0));
     const percentage = Math.max(0, (cgpa - 0.5) * 10);
 
     let classification = "Fail";

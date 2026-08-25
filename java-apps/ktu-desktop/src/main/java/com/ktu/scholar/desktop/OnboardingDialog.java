@@ -126,7 +126,7 @@ public class OnboardingDialog extends JDialog {
     private JPanel buildStep2() {
         JPanel p = step("2.  KTU Portal Credentials  (Optional)",
                 "Used to fetch your results. Stored encrypted on your device only. " +
-                "Leave blank to use demo data.");
+                "Leave blank until you are ready to sync real KTU data.");
         ktuPassField = new JPasswordField();
         styleField(ktuPassField);
         addLabeledComp(p, "KTU Portal Password", ktuPassField);
@@ -142,7 +142,7 @@ public class OnboardingDialog extends JDialog {
 
     private JPanel buildStep3() {
         JPanel p = step("3.  EzyGo Credentials  (Optional)",
-                "Used to fetch attendance from EzyGo. Leave blank to use demo data.");
+                "Used to fetch attendance from EzyGo. Leave blank until you are ready to sync real attendance.");
         ezygoPassField = new JPasswordField();
         styleField(ezygoPassField);
         addLabeledComp(p, "EzyGo Password", ezygoPassField);

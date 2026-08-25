@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
  * EzyGo is a single-page Angular app backed by a REST API.
  * Login returns a JWT; subsequent calls pass it as Bearer token.
  *
- * Falls back to demo data when the portal is unreachable.
+ * Throws when the portal is unreachable or returns no readable rows.
  */
 public class EzygoService {
 
@@ -35,15 +35,14 @@ public class EzygoService {
     }
 
     /**
-     * Fetches attendance from EzyGo; falls back to demo data on any error.
+     * Fetches attendance from EzyGo without substituting invented data.
      */
-    public List<SubjectAttendance> fetchAttendance(String registerNumber, String ezygoPassword) {
-        try {
-            return scrapeAttendance(registerNumber, ezygoPassword);
-        } catch (Exception e) {
-            log.warn("EzyGo fetch failed: {}. Returning demo data.", e.getMessage());
-            return demoAttendance();
+    public List<SubjectAttendance> fetchAttendance(String registerNumber, String ezygoPassword) throws IOException {
+        List<SubjectAttendance> attendance = scrapeAttendance(registerNumber, ezygoPassword);
+        if (attendance.isEmpty()) {
+            throw new IOException("EzyGo returned no readable attendance rows");
         }
+        return attendance;
     }
 
     // ── Scraping ──────────────────────────────────────────────────────────
@@ -103,27 +102,14 @@ public class EzygoService {
             sa.setAttendedClasses(getInt(s, "attendedClasses", "attended", "attended_classes", 0));
             list.add(AttendanceAnalysisService.analyse(sa));
         }
+        if (list.stream().anyMatch(s -> s.getSubjectCode().isBlank()
+                || s.getSubjectName().isBlank()
+                || s.getTotalClasses() <= 0
+                || s.getAttendedClasses() < 0
+                || s.getAttendedClasses() > s.getTotalClasses())) {
+            throw new IOException("EzyGo returned invalid attendance rows");
+        }
         return list;
-    }
-
-    // ── Demo data ─────────────────────────────────────────────────────────
-
-    private List<SubjectAttendance> demoAttendance() {
-        return Arrays.asList(
-            make("CST301", "Data Structures",                     52, 42),
-            make("CST303", "Logic System Design",                 48, 32),
-            make("CST305", "Computer Organization & Architecture", 50, 44),
-            make("MAT203", "Discrete Mathematical Structures",    52, 37),
-            make("CST307", "OOP using Java",                      50, 40),
-            make("HUT200", "Professional Ethics",                  30, 16)
-        );
-    }
-
-    private SubjectAttendance make(String code, String name, int total, int attended) {
-        SubjectAttendance sa = new SubjectAttendance();
-        sa.setSubjectCode(code); sa.setSubjectName(name);
-        sa.setTotalClasses(total); sa.setAttendedClasses(attended);
-        return AttendanceAnalysisService.analyse(sa);
     }
 
     // ── JSON helpers ──────────────────────────────────────────────────────

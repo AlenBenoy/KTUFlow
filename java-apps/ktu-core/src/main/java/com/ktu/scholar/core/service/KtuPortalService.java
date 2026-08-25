@@ -23,8 +23,8 @@ import java.util.concurrent.TimeUnit;
  *  2. POST /eu/bms/userLogin.htm  — submit credentials
  *  3. GET  /eu/stu/viewResults.htm — parse results table
  *
- * When the portal is unreachable, returns curated demo data so the app
- * remains usable offline.
+ * When the portal is unreachable or its response cannot be parsed, the
+ * service throws. Student records must never be replaced with invented data.
  */
 public class KtuPortalService {
 
@@ -56,15 +56,15 @@ public class KtuPortalService {
 
     /**
      * Fetches results from KTU portal.
-     * Falls back to demo data on any network / parse error.
+     * Returns only rows parsed from the KTU portal. Student records are
+     * never replaced with invented data.
      */
-    public List<SemesterResult> fetchResults(String registerNumber, String password) {
-        try {
-            return scrapeResults(registerNumber, password);
-        } catch (Exception e) {
-            log.warn("KTU portal scrape failed: {}. Returning demo data.", e.getMessage());
-            return demoResults(registerNumber);
+    public List<SemesterResult> fetchResults(String registerNumber, String password) throws IOException {
+        List<SemesterResult> results = scrapeResults(registerNumber, password);
+        if (results.isEmpty()) {
+            throw new IOException("KTU returned no readable result rows");
         }
+        return results;
     }
 
     // ── Scraping ──────────────────────────────────────────────────────────
@@ -135,7 +135,18 @@ public class KtuPortalService {
                 SubjectResult sr = new SubjectResult();
                 sr.setSubjectCode(code);
                 sr.setSubjectName(name);
-                sr.setCredits(4.0);
+                double credits = 0;
+                for (int j = 2; j < cells.size() - 1; j++) {
+                    try {
+                        double candidate = Double.parseDouble(cells.get(j).text().trim());
+                        if (candidate > 0 && candidate <= 10) {
+                            credits = candidate;
+                            break;
+                        }
+                    } catch (NumberFormatException ignored) {}
+                }
+                if (credits == 0) continue;
+                sr.setCredits(credits);
                 sr.setGrade(grade);
                 sr.setGradePoint(GRADE_POINTS.getOrDefault(grade, 0.0));
                 sr.setResult(sr.getGradePoint() >= 4
@@ -169,50 +180,6 @@ public class KtuPortalService {
         }
 
         return semesters;
-    }
-
-    // ── Demo data ─────────────────────────────────────────────────────────
-
-    private List<SemesterResult> demoResults(String registerNumber) {
-        SemesterResult s1 = new SemesterResult();
-        s1.setSemester(1); s1.setSgpa(8.2); s1.setCgpa(8.2);
-        addSubject(s1, "MAT101", "Calculus and its Applications", 4, "B+", 8.0, 38, 62);
-        addSubject(s1, "PHT110", "Engineering Physics", 4, "A", 8.5, 40, 65);
-        addSubject(s1, "CYT110", "Engineering Chemistry", 4, "B+", 8.0, 35, 55);
-        addSubject(s1, "EST110", "Engineering Mechanics", 4, "B", 7.0, 32, 50);
-        addSubject(s1, "HUT110", "Life Skills", 2, "A+", 9.0, 20, 70);
-        addSubject(s1, "EST120", "Basics of Civil & Mech. Engineering", 3, "S", 10.0, 45, 75);
-
-        SemesterResult s2 = new SemesterResult();
-        s2.setSemester(2); s2.setSgpa(7.9); s2.setCgpa(8.05);
-        addSubject(s2, "MAT102", "Vector Calculus & Diff. Equations", 4, "B+", 8.0, 36, 58);
-        addSubject(s2, "EST130", "Basics of Electrical & Electronics", 4, "B", 7.0, 30, 48);
-        addSubject(s2, "EST140", "Basic Electronics & Communication", 4, "B+", 8.0, 37, 57);
-        addSubject(s2, "CST102", "Problem Solving using Python", 4, "A", 8.5, 42, 63);
-        addSubject(s2, "PHT120", "Engineering Physics Lab", 2, "A+", 9.0, 22, 68);
-
-        SemesterResult s3 = new SemesterResult();
-        s3.setSemester(3); s3.setSgpa(7.5); s3.setCgpa(7.87);
-        addSubject(s3, "CST301", "Data Structures", 4, "B+", 8.0, 35, 56);
-        addSubject(s3, "CST303", "Logic System Design", 4, "B", 7.0, 28, 47);
-        addSubject(s3, "CST305", "Computer Organization & Architecture", 4, "B+", 8.0, 34, 55);
-        addSubject(s3, "MAT203", "Discrete Mathematical Structures", 4, "B", 7.0, 30, 50);
-        addSubject(s3, "CST307", "OOP using Java", 4, "A", 8.5, 40, 62);
-        addSubject(s3, "HUT200", "Professional Ethics", 2, "A+", 9.0, 18, 72);
-
-        return Arrays.asList(s1, s2, s3);
-    }
-
-    private void addSubject(SemesterResult sem, String code, String name,
-                            double credits, String grade, double gp,
-                            double internal, double external) {
-        SubjectResult s = new SubjectResult();
-        s.setSubjectCode(code); s.setSubjectName(name);
-        s.setCredits(credits); s.setGrade(grade); s.setGradePoint(gp);
-        s.setInternalMarks(internal); s.setExternalMarks(external);
-        s.setTotalMarks(internal + external);
-        s.setResult(gp >= 4 ? SubjectResult.ResultStatus.PASS : SubjectResult.ResultStatus.FAIL);
-        sem.addSubject(s);
     }
 
     // ── Cookie jar ────────────────────────────────────────────────────────

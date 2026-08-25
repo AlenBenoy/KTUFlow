@@ -55,7 +55,8 @@ ktu-android
 - Results/attendance scraping uses Jsoup + OkHttp (same in both apps).
 - KTU portal login submits a form to `https://app.ktu.edu.in`.
 - EzyGo is a SPA; the service hits its REST API with a JWT token obtained via login.
-- When the portal is unreachable (timeout), demo data is shown automatically.
+- When the portal is unreachable or its HTML changes, the app shows an explicit
+  sync error. It never substitutes fabricated student results or attendance.
 
 ## Credentials Storage
 

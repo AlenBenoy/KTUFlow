@@ -85,7 +85,9 @@ async function fetchEzygoAttendance(registerNumber: string, password: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  const rawSubjects = attendanceRes.data?.subjects || attendanceRes.data?.data || [];
+  const rawSubjects = Array.isArray(attendanceRes.data)
+    ? attendanceRes.data
+    : attendanceRes.data?.subjects || attendanceRes.data?.data || [];
   return rawSubjects.map((s: Record<string, unknown>) => ({
     subjectCode: String(s["subjectCode"] || s["code"] || ""),
     subjectName: String(s["subjectName"] || s["name"] || ""),
@@ -101,10 +103,9 @@ router.get("/attendance", async (req, res) => {
   try {
     const rows = await db.select().from(attendanceCacheTable).limit(1);
     if (rows.length === 0) {
-      res.json({
-        subjects: [],
-        overallPercentage: 0,
-        syncedAt: null,
+      res.status(404).json({
+        error: "not_found",
+        message: "No attendance data cached. Please sync from EzyGo first.",
       });
       return;
     }
@@ -133,19 +134,33 @@ router.post("/attendance/sync", async (req, res) => {
     try {
       rawSubjects = await fetchEzygoAttendance(creds.registerNumber, creds.ezygoPassword);
     } catch (scrapeErr) {
-      req.log.warn({ scrapeErr }, "EzyGo scrape failed — using demo data");
-      // Demo attendance data
-      rawSubjects = [
-        { subjectCode: "CST301", subjectName: "Data Structures", totalClasses: 52, attendedClasses: 42, percentage: 0, status: "safe" },
-        { subjectCode: "CST303", subjectName: "Logic System Design", totalClasses: 48, attendedClasses: 32, percentage: 0, status: "danger" },
-        { subjectCode: "CST305", subjectName: "Computer Organization & Architecture", totalClasses: 50, attendedClasses: 44, percentage: 0, status: "safe" },
-        { subjectCode: "MAT203", subjectName: "Discrete Mathematical Structures", totalClasses: 52, attendedClasses: 37, percentage: 0, status: "warning" },
-        { subjectCode: "CST307", subjectName: "Object Oriented Programming using Java", totalClasses: 50, attendedClasses: 40, percentage: 0, status: "safe" },
-        { subjectCode: "HUT200", subjectName: "Professional Ethics", totalClasses: 30, attendedClasses: 16, percentage: 0, status: "condonation" },
-      ];
+      req.log.warn({ scrapeErr }, "EzyGo scrape failed");
+      res.status(502).json({
+        error: "portal_unavailable",
+        message: "EzyGo attendance could not be fetched. No sample attendance was used.",
+      });
+      return;
+    }
+
+    if (rawSubjects.length === 0) {
+      res.status(502).json({
+        error: "attendance_unreadable",
+        message: "EzyGo returned no readable attendance rows. No sample attendance was used.",
+      });
+      return;
     }
 
     const subjects = processSubjects(rawSubjects);
+    if (subjects.length === 0 || subjects.some((subject) =>
+      !subject.subjectCode || !subject.subjectName || subject.totalClasses <= 0 ||
+      subject.attendedClasses < 0 || subject.attendedClasses > subject.totalClasses
+    )) {
+      res.status(502).json({
+        error: "attendance_unreadable",
+        message: "EzyGo returned invalid attendance rows. No sample attendance was used.",
+      });
+      return;
+    }
     const overallPct =
       subjects.length > 0
         ? Math.round(

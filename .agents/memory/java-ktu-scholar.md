@@ -23,4 +23,8 @@ ktu-android/ is a separate Android Studio project (its own settings.gradle). Ope
 Both desktop and Android encrypt credentials with AES-256-GCM + PBKDF2. Desktop uses OS username as master password; Android uses Android ID from Settings.Secure. Neither stores plaintext anywhere.
 
 ## Demo data fallback
-KtuPortalService, EzygoService, AnnouncementService all catch any exception and return hardcoded demo data. This means the app is always usable even when the portals are down.
+Student-facing result and attendance services must never return hardcoded demo records. They must throw an explicit sync/parse error when the portal is unavailable or its HTML/API shape changes.
+
+**Why:** Invented subject names, credits, marks, and attendance produce materially incorrect CGPA and eligibility information; an empty state is safer than plausible-looking fake data.
+
+**How to apply:** Keep sample data out of result/attendance production paths. Only calculate SGPA/CGPA from portal-supplied subject codes, names, grades, and credits; reject incomplete rows instead of assigning defaults.

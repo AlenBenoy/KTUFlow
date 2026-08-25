@@ -124,16 +124,12 @@ router.post("/announcements/sync", async (req, res) => {
     try {
       items = await scrapeAnnouncements();
     } catch (scrapeErr) {
-      req.log.warn({ scrapeErr }, "Live scrape failed — returning demo announcements");
-      // Demo data so the app looks functional even when portal is unreachable
-      items = [
-        { id: randomUUID(), title: "S7 Regular Exam Registration Now Open", content: "Semester 7 regular examination registration is now open. Last date: 30th July 2026.", category: "exam", date: "2026-07-15", link: KTU_BASE },
-        { id: randomUUID(), title: "B.Tech S5 Supplementary Results Published", content: "Results for S5 supplementary examinations are now available on the portal.", category: "result", date: "2026-07-12", link: KTU_BASE },
-        { id: randomUUID(), title: "Revised Academic Calendar 2026–27 Released", content: "The revised academic calendar for 2026-27 is now available for download.", category: "academic", date: "2026-07-10", link: KTU_BASE },
-        { id: randomUUID(), title: "Anti-Ragging Committee Meeting Notice", content: "Colleges are reminded to submit anti-ragging compliance certificates.", category: "general", date: "2026-07-08", link: KTU_BASE },
-        { id: randomUUID(), title: "S3 Regular Examination Hall Tickets Available", content: "Hall tickets for S3 regular examinations are available for download.", category: "exam", date: "2026-07-05", link: KTU_BASE },
-        { id: randomUUID(), title: "KTU Online Faculty Development Programme", content: "Registrations open for online FDP on Advanced Computing Technologies.", category: "academic", date: "2026-07-03", link: KTU_BASE },
-      ];
+      req.log.warn({ scrapeErr }, "Live announcement scrape failed");
+      res.status(502).json({
+        error: "portal_unavailable",
+        message: "KTU announcements could not be fetched. No sample announcements were used.",
+      });
+      return;
     }
 
     // Clear old entries and insert fresh ones
