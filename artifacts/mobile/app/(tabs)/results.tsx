@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import {
@@ -30,8 +30,10 @@ export default function ResultsTab() {
         queryClient.invalidateQueries({ queryKey: getGetResultsQueryKey() });
         setRefreshing(false);
       },
-      onError: () => {
+      onError: (error) => {
         setRefreshing(false);
+        const message = error?.message || 'KTU did not return readable results. No sample data was used.';
+        Alert.alert('Results sync failed', message);
       }
     });
   }, [syncResults, queryClient]);

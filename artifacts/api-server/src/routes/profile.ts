@@ -2,6 +2,11 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   profilesTable,
+  todosTable,
+  resultsCacheTable,
+  attendanceCacheTable,
+  announcementsCacheTable,
+  focusSettingsTable,
   type InsertProfile,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -156,6 +161,24 @@ router.post("/profile", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to save profile");
     res.status(500).json({ error: "internal_error", message: "Failed to save profile" });
+  }
+});
+
+// DELETE /api/profile — remove the local account and every user-derived cache.
+router.delete("/profile", async (req, res) => {
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(profilesTable);
+      await tx.delete(todosTable);
+      await tx.delete(resultsCacheTable);
+      await tx.delete(attendanceCacheTable);
+      await tx.delete(announcementsCacheTable);
+      await tx.delete(focusSettingsTable);
+    });
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to clear account data");
+    res.status(500).json({ error: "internal_error", message: "Failed to clear account data" });
   }
 });
 

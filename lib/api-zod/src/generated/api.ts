@@ -67,6 +67,12 @@ export const SaveProfileResponse = zod.object({
 
 
 /**
+ * @summary Log out and clear the profile and all stored student data
+ */
+export const DeleteProfileResponse = zod.void()
+
+
+/**
  * @summary Get cached KTU results
  */
 export const GetResultsResponse = zod.object({

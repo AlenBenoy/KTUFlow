@@ -1,6 +1,7 @@
 import { Router } from "express";
 import axios from "axios";
 import * as cheerio from "cheerio";
+import https from "node:https";
 import { db } from "@workspace/db";
 import { resultsCacheTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -18,6 +19,16 @@ const GRADE_POINTS: Record<string, number> = {
 };
 
 async function fetchKtuResults(registerNumber: string, password: string) {
+  const cookieJar = new Map<string, string>();
+  const rememberCookies = (setCookies: string[] | undefined) => {
+    for (const raw of setCookies ?? []) {
+      const pair = raw.split(";", 1)[0];
+      const separator = pair.indexOf("=");
+      if (separator > 0) cookieJar.set(pair.slice(0, separator), pair.slice(separator + 1));
+    }
+  };
+  const cookieHeader = () =>
+    [...cookieJar.entries()].map(([key, value]) => `${key}=${value}`).join("; ");
   const session = axios.create({
     baseURL: KTU_BASE,
     timeout: 20000,
@@ -27,41 +38,63 @@ async function fetchKtuResults(registerNumber: string, password: string) {
       "Content-Type": "application/x-www-form-urlencoded",
     },
     withCredentials: true,
-    maxRedirects: 5,
+    // Scoped to the KTU upstream only: its certificate chain is intermittently
+    // incomplete from this environment, while the rest of the API remains strict.
+    httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+    maxRedirects: 0,
+    validateStatus: (status) => status >= 200 && status < 400,
   });
 
-  // Step 1: GET login page to capture CSRF / hidden fields
-  const loginPage = await session.get("/eu/bms/userLogin.htm");
-  const $login = cheerio.load(loginPage.data as string);
-  const csrfToken = $login('input[name="_csrf"]').val() as string | undefined;
-  const formAction = $login("form").attr("action") || "/eu/bms/userLogin.htm";
+  const request = async (url: string, config: Parameters<typeof session.request>[0] = {}) => {
+    const response = await session.request({
+      ...config,
+      url,
+      headers: { ...(config.headers ?? {}), ...(cookieHeader() ? { Cookie: cookieHeader() } : {}) },
+    });
+    rememberCookies(response.headers["set-cookie"] as string[] | undefined);
+    return response;
+  };
 
-  const cookies = (loginPage.headers["set-cookie"] || []) as string[];
-  const cookieHeader = cookies.map((c) => c.split(";")[0]).join("; ");
+  // The portal currently redirects this legacy path to /login.htm.
+  let loginPage = await request("/eu/bms/userLogin.htm");
+  if (loginPage.status >= 300 && loginPage.headers.location) {
+    loginPage = await request(loginPage.headers.location);
+  }
+  const $login = cheerio.load(loginPage.data as string);
+  const csrfToken = ($login('input[name="CSRF_TOKEN"]').val() ??
+    $login('input[name="_csrf"]').val()) as string | undefined;
+  const formAction = $login("form[name='loginform']").attr("action") || "/login.htm";
+  const loginPath = new URL(formAction, KTU_BASE).pathname;
 
   // Step 2: POST login
   const loginParams = new URLSearchParams({
-    j_username: registerNumber,
-    j_password: password,
-    ...(csrfToken ? { _csrf: csrfToken } : {}),
+    username: registerNumber,
+    password,
+    ...(csrfToken ? { CSRF_TOKEN: csrfToken } : {}),
   });
 
-  const loginRes = await session.post(
-    formAction.startsWith("http") ? formAction : `${KTU_BASE}${formAction}`,
-    loginParams.toString(),
-    { headers: { Cookie: cookieHeader } }
-  );
-
-  const newCookies = [
-    ...cookies,
-    ...((loginRes.headers["set-cookie"] || []) as string[]),
-  ];
-  const authedCookies = newCookies.map((c) => c.split(";")[0]).join("; ");
+  const loginRes = await request(loginPath, {
+    method: "POST",
+    data: loginParams.toString(),
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Referer: `${KTU_BASE}${loginPath}` },
+  });
+  if (loginRes.status >= 300 && loginRes.headers.location && /login/i.test(loginRes.headers.location)) {
+    throw new Error("KTU rejected the supplied credentials");
+  }
+  if (loginRes.status === 200 && /name=["']loginform["']/i.test(String(loginRes.data))) {
+    throw new Error("KTU rejected the supplied credentials");
+  }
 
   // Step 3: Fetch results page
-  const resultsPage = await session.get(RESULTS_URL, {
-    headers: { Cookie: authedCookies },
-  });
+  let resultsPage = await request(RESULTS_URL);
+  if (resultsPage.status >= 300 && resultsPage.headers.location) {
+    const target = new URL(resultsPage.headers.location, KTU_BASE).pathname;
+    if (/login/i.test(target)) throw new Error("KTU session was not authenticated");
+    resultsPage = await request(target);
+  }
+  if (/name=["']loginform["']/i.test(String(resultsPage.data))) {
+    throw new Error("KTU session was not authenticated");
+  }
 
   const parsed = parseResultsHtml(resultsPage.data as string);
   if (parsed.length === 0) {
@@ -91,48 +124,58 @@ function parseResultsHtml(html: string) {
     }>;
   }> = [];
 
-  // Try to extract semester sections
-  $(".semester-result, .result-section, table").each((_i, table) => {
+  // KTU has used several table layouts. Accept rows only when the table
+  // headers identify code, name, credits, and grade; never guess credits from
+  // marks or column position.
+  $("table").each((_i, table) => {
     const rows = $(table).find("tr");
     if (rows.length < 2) return;
 
     const semesterSubjects: typeof semesters[0]["subjects"] = [];
+    const headers = $(rows[0]).find("th, td").toArray().map((cell) => normalize($(cell).text()));
+    const findColumn = (...names: string[]) => headers.findIndex((header) =>
+      names.some((name) => header.includes(name)));
+    const codeIndex = findColumn("subject code", "course code", "sub code");
+    const nameIndex = findColumn("subject name", "course name");
+    const creditIndex = findColumn("credit", "credits");
+    const gradeIndex = findColumn("grade");
+    if (codeIndex < 0 || nameIndex < 0 || creditIndex < 0 || gradeIndex < 0) return;
+
     const sectionText = $(table).parent().text() + " " + $(table).prevAll().slice(0, 3).text();
     const semesterMatch = sectionText.match(/semester\s*[-:]?\s*(\d+)/i);
-    let semesterNum = semesterMatch ? Number(semesterMatch[1]) : semesters.length + 1;
-    let sgpa: number | undefined;
+    const semesterNum = semesterMatch ? Number(semesterMatch[1]) : semesters.length + 1;
 
-    rows.each((_j, row) => {
-      const cells = $(row).find("td");
-      if (cells.length >= 3) {
-        const code = $(cells[0]).text().trim();
-        const name = $(cells[1]).text().trim();
-        const grade = $(cells[cells.length - 1]).text().trim().toUpperCase();
-
-        const creditCell = cells.toArray()
-          .slice(2, -1)
-          .map((cell) => Number($(cell).text().trim()))
-          .find((value) => Number.isFinite(value) && value > 0 && value <= 10);
-
-        if (code.length > 2 && name.length > 2 && grade in GRADE_POINTS && creditCell !== undefined) {
+    rows.slice(1).each((_j, row) => {
+      const cells = $(row).find("td").toArray();
+      const value = (index: number) =>
+        index >= 0 && cells[index] ? $(cells[index]).text().replace(/\s+/g, " ").trim() : "";
+      const code = value(codeIndex);
+      const name = value(nameIndex);
+      const grade = value(gradeIndex).toUpperCase();
+      const credits = Number(value(creditIndex).replace(",", "."));
+      if (code.length > 2 && name.length > 2 && grade in GRADE_POINTS &&
+          Number.isFinite(credits) && credits > 0 && credits <= 10) {
           semesterSubjects.push({
             subjectCode: code,
             subjectName: name,
             grade,
-            credits: creditCell,
+            credits,
             gradePoint: GRADE_POINTS[grade] ?? 0,
             result: (GRADE_POINTS[grade] ?? 0) >= 4 ? "PASS" : "FAIL",
           });
-        }
       }
     });
 
     if (semesterSubjects.length > 0) {
-      semesters.push({ semester: semesterNum, subjects: semesterSubjects, sgpa });
+      semesters.push({ semester: semesterNum, subjects: semesterSubjects });
     }
   });
 
   return semesters;
+}
+
+function normalize(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function computeGpa(semesters: ReturnType<typeof parseResultsHtml>) {

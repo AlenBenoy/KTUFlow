@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Switch, Modal, Platform } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Switch, Modal, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { useGetProfile, useGetFocusSettings, useUpdateFocusSettings } from '@workspace/api-client-react';
+import { useGetProfile, useGetFocusSettings, useUpdateFocusSettings, useDeleteProfile } from '@workspace/api-client-react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 
 export default function MoreTab() {
   const colors = useColors();
   const router = useRouter();
+  const queryClient = useQueryClient();
   
   const { data: profile } = useGetProfile();
   const { data: focusSettings } = useGetFocusSettings();
   const { mutate: updateFocus } = useUpdateFocusSettings();
+  const { mutate: deleteProfile, isPending: isLoggingOut } = useDeleteProfile();
 
   const [focusActive, setFocusActive] = useState(focusSettings?.enabled || false);
   const [focusTimer, setFocusTimer] = useState(0);
@@ -23,7 +26,7 @@ export default function MoreTab() {
   }, [focusSettings]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (focusActive) {
       interval = setInterval(() => {
         setFocusTimer(prev => prev + 1);
@@ -31,7 +34,9 @@ export default function MoreTab() {
     } else {
       setFocusTimer(0);
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [focusActive]);
 
   const toggleFocus = () => {
@@ -45,6 +50,27 @@ export default function MoreTab() {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const logout = () => {
+    Alert.alert(
+      'Log out and clear data?',
+      'This permanently deletes your profile, credentials, results, attendance, announcements, tasks, and focus settings from this app.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log out',
+          style: 'destructive',
+          onPress: () => deleteProfile(undefined, {
+            onSuccess: async () => {
+              await queryClient.clear();
+              router.replace('/onboarding');
+            },
+            onError: () => Alert.alert('Could not log out', 'Your data was not cleared. Please try again.'),
+          }),
+        },
+      ],
+    );
   };
 
   return (
@@ -134,6 +160,17 @@ export default function MoreTab() {
         >
           <Text style={[styles.actionText, { color: colors.foreground }]}>Edit Profile</Text>
           <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionRow, styles.logoutRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={logout}
+          disabled={isLoggingOut}
+        >
+          <Text style={[styles.actionText, { color: colors.destructive }]}>
+            {isLoggingOut ? 'Logging out…' : 'Log out and clear data'}
+          </Text>
+          <Ionicons name="log-out-outline" size={20} color={colors.destructive} />
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -271,5 +308,8 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 16,
     fontFamily: 'Inter_500Medium',
+  },
+  logoutRow: {
+    marginTop: 12,
   },
 });

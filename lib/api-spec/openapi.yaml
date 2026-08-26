@@ -77,6 +77,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Profile"
+    delete:
+      operationId: deleteProfile
+      tags: [profile]
+      summary: Log out and clear the profile and all stored student data
+      responses:
+        "204":
+          description: All stored student data was deleted
+        "500":
+          description: Data could not be cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ─── KTU Results ───────────────────────────────────────────────────────────
   /results:

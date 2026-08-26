@@ -33,7 +33,7 @@ function RootLayoutNav() {
     const inTabsGroup = segments[0] === '(tabs)';
     
     if (error && error.status === 404) {
-      if (inTabsGroup || segments.length === 0) {
+      if (inTabsGroup) {
         router.replace('/onboarding');
       }
     } else if (profile) {

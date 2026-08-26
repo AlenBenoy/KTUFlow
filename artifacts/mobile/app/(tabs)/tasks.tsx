@@ -223,7 +223,7 @@ export default function TasksTab() {
                     </View>
                     <TouchableOpacity 
                       style={styles.deleteButton}
-                      onPress={() => deleteTodo(todo.id, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetTodosQueryKey({ status: taskFilter }) }) })}
+                      onPress={() => deleteTodo({ id: todo.id }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetTodosQueryKey({ status: taskFilter }) }) })}
                     >
                       <Ionicons name="trash-outline" size={20} color={colors.mutedForeground} />
                     </TouchableOpacity>
