@@ -29,7 +29,7 @@ public class GradeCalcPanel extends BasePanel {
     }
 
     private void buildContent() {
-        JPanel body = getBodyPanel();
+        JPanel body = new JPanel();
         body.setLayout(new BorderLayout(0, 20));
 
         // ── Grade entry table ─────────────────────────────────────────

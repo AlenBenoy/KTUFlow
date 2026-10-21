@@ -44,6 +44,7 @@ export * from './subjectGradeInput';
 export * from './subjectResult';
 export * from './subjectResultResult';
 export * from './successResponse';
+export * from './syncResultsBody';
 export * from './todo';
 export * from './todoCategory';
 export * from './todoInput';

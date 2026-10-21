@@ -85,6 +85,15 @@ public class ProfileRepository {
         return getProfile();
     }
 
+    /** Deletes profile and associated cached data on logout. */
+    public void deleteProfile() throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate("DELETE FROM profiles");
+            stmt.executeUpdate("DELETE FROM results_cache");
+            stmt.executeUpdate("DELETE FROM attendance_cache");
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private Profile mapRow(ResultSet rs) throws SQLException {

@@ -116,6 +116,18 @@ paths:
       operationId: syncResults
       tags: [results]
       summary: Fetch fresh results from KTU portal using stored credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                semester:
+                  type: integer
+                  minimum: 1
+                  maximum: 8
+              required: [semester]
       responses:
         "200":
           description: Results synced
@@ -125,6 +137,12 @@ paths:
                 $ref: "#/components/schemas/ResultsResponse"
         "400":
           description: Credentials missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: KTU rejected the stored credentials
           content:
             application/json:
               schema:

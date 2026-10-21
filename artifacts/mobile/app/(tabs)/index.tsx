@@ -52,7 +52,7 @@ export default function HomeTab() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     Promise.all([
-      new Promise(resolve => syncResults(undefined, { onSettled: resolve })),
+      new Promise(resolve => syncResults({ data: { semester: profile?.semester ?? 1 } }, { onSettled: resolve })),
       new Promise(resolve => syncAttendance(undefined, { onSettled: resolve }))
     ]).then(() => {
       queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey() });
@@ -60,7 +60,7 @@ export default function HomeTab() {
       queryClient.invalidateQueries({ queryKey: getGetAttendanceQueryKey() });
       setRefreshing(false);
     });
-  }, [syncResults, syncAttendance, queryClient]);
+  }, [profile?.semester, syncResults, syncAttendance, queryClient]);
 
   const todos = todosData?.todos?.slice(0, 3) || [];
   const announcements = announcementsData?.announcements?.slice(0, 3) || [];

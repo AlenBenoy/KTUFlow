@@ -104,6 +104,14 @@ export const GetResultsResponse = zod.object({
 /**
  * @summary Fetch fresh results from KTU portal using stored credentials
  */
+export const syncResultsBodySemesterMax = 8;
+
+
+
+export const SyncResultsBody = zod.object({
+  "semester": zod.number().min(1).max(syncResultsBodySemesterMax)
+})
+
 export const SyncResultsResponse = zod.object({
   "registerNumber": zod.string(),
   "studentName": zod.string().optional(),

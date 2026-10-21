@@ -54,7 +54,7 @@ export default function MoreTab() {
 
   const logout = () => {
     Alert.alert(
-      'Log out and clear data?',
+      'Log out?',
       'This permanently deletes your profile, credentials, results, attendance, announcements, tasks, and focus settings from this app.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -168,7 +168,7 @@ export default function MoreTab() {
           disabled={isLoggingOut}
         >
           <Text style={[styles.actionText, { color: colors.destructive }]}>
-            {isLoggingOut ? 'Logging out…' : 'Log out and clear data'}
+            {isLoggingOut ? 'Logging out…' : 'Log out'}
           </Text>
           <Ionicons name="log-out-outline" size={20} color={colors.destructive} />
         </TouchableOpacity>

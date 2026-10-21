@@ -1,6 +1,7 @@
 package com.ktu.scholar.desktop;
 
 import com.ktu.scholar.core.db.DatabaseHelper;
+import com.ktu.scholar.core.db.ProfileRepository;
 import com.ktu.scholar.desktop.panels.*;
 
 import javax.swing.*;
@@ -20,6 +21,7 @@ public class MainFrame extends JFrame {
     private static final Color ACCENT      = new Color(0xF59E0B);
     private static final Color FG          = new Color(0xF0F4FF);
     private static final Color MUTED       = new Color(0x8BA3C7);
+    private static final Color DANGER      = new Color(0xEF4444);
 
     private final DatabaseHelper db;
     private final CardLayout cardLayout = new CardLayout();
@@ -71,6 +73,26 @@ public class MainFrame extends JFrame {
             btn.addActionListener(e -> cardLayout.show(contentPanel, tab));
         }
 
+        // Push Logout button to bottom
+        sidebar.add(Box.createVerticalGlue());
+
+        // Logout button
+        JButton logoutBtn = new JButton("🚪  Log Out");
+        logoutBtn.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        logoutBtn.setForeground(DANGER);
+        logoutBtn.setBackground(SIDEBAR_BG);
+        logoutBtn.setBorderPainted(false);
+        logoutBtn.setFocusPainted(false);
+        logoutBtn.setContentAreaFilled(false);
+        logoutBtn.setOpaque(true);
+        logoutBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        logoutBtn.setHorizontalAlignment(SwingConstants.LEFT);
+        logoutBtn.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        logoutBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+        logoutBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        logoutBtn.addActionListener(e -> handleLogout());
+        sidebar.add(logoutBtn);
+
         // ── Content panels ────────────────────────────────────────────
         contentPanel.setBackground(BG);
         contentPanel.add(new DashboardPanel(db),   "Dashboard");
@@ -80,7 +102,7 @@ public class MainFrame extends JFrame {
         contentPanel.add(new MaterialsPanel(),     "Materials");
         contentPanel.add(new GradeCalcPanel(),     "GPA Calc");
         contentPanel.add(new FocusPanel(db),       "Focus");
-        contentPanel.add(new SettingsPanel(db),    "Settings");
+        contentPanel.add(new SettingsPanel(db, this::handleLogout), "Settings");
 
         // Select first tab
         navButtons[0].setSelected(true);
@@ -88,6 +110,37 @@ public class MainFrame extends JFrame {
 
         add(sidebar, BorderLayout.WEST);
         add(contentPanel, BorderLayout.CENTER);
+    }
+
+    public void handleLogout() {
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to log out? This will clear local profile and cached data.",
+                "Confirm Logout", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            try {
+                new ProfileRepository(db.getConnection()).deleteProfile();
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(this, "Logout warning: " + e.getMessage());
+            }
+
+            dispose();
+
+            // Re-open setup / onboarding wizard
+            SwingUtilities.invokeLater(() -> {
+                OnboardingDialog onboarding = new OnboardingDialog(null, db);
+                onboarding.setVisible(true);
+                try {
+                    if (new ProfileRepository(db.getConnection()).getProfile() != null) {
+                        new MainFrame(db).setVisible(true);
+                    } else {
+                        System.exit(0);
+                    }
+                } catch (Exception ignored) {
+                    System.exit(0);
+                }
+            });
+        }
     }
 
     private JToggleButton createNavButton(String icon, String label) {

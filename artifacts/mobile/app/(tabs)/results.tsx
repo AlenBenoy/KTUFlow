@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl, TouchableOpacity, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import {
@@ -20,12 +20,14 @@ export default function ResultsTab() {
 
   const [expandedSemesters, setExpandedSemesters] = useState<number[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedSemester, setSelectedSemester] = useState(1);
+  const [semesterMenuVisible, setSemesterMenuVisible] = useState(false);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    syncResults(undefined, {
+    syncResults({ data: { semester: selectedSemester } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetResultsQueryKey() });
         setRefreshing(false);
@@ -36,7 +38,7 @@ export default function ResultsTab() {
         Alert.alert('Results sync failed', message);
       }
     });
-  }, [syncResults, queryClient]);
+  }, [selectedSemester, syncResults, queryClient]);
 
   const toggleSemester = (sem: number) => {
     Haptics.selectionAsync();
@@ -75,6 +77,63 @@ export default function ResultsTab() {
           <Ionicons name="cloud-download-outline" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
+
+      <View style={styles.searchBar}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Select semester"
+          style={[styles.semesterPicker, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => setSemesterMenuVisible(true)}
+        >
+          <Text style={[styles.pickerLabel, { color: colors.mutedForeground }]}>Semester</Text>
+          <Text style={[styles.pickerValue, { color: colors.foreground }]}>S{selectedSemester}</Text>
+          <Ionicons name="chevron-down" size={18} color={colors.mutedForeground} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={`Search results for semester ${selectedSemester}`}
+          style={[styles.searchButton, { backgroundColor: colors.primary }]}
+          onPress={onRefresh}
+          disabled={isSyncing}
+        >
+          <Ionicons name="search" size={18} color={colors.primaryForeground} />
+          <Text style={[styles.searchButtonText, { color: colors.primaryForeground }]}>
+            {isSyncing ? 'Searching…' : 'Search'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal
+        visible={semesterMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSemesterMenuVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setSemesterMenuVisible(false)}
+        >
+          <View style={[styles.semesterMenu, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.menuTitle, { color: colors.foreground }]}>Select semester</Text>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((semester) => (
+              <TouchableOpacity
+                key={semester}
+                style={[styles.menuOption, selectedSemester === semester && { backgroundColor: colors.muted }]}
+                onPress={() => {
+                  setSelectedSemester(semester);
+                  setSemesterMenuVisible(false);
+                }}
+              >
+                <Text style={[styles.menuOptionText, { color: colors.foreground }]}>S{semester}</Text>
+                {selectedSemester === semester && (
+                  <Ionicons name="checkmark" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -183,6 +242,71 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+  },
+  semesterPicker: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  pickerLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+  },
+  pickerValue: {
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: 2,
+  },
+  searchButton: {
+    minHeight: 52,
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  searchButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  semesterMenu: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+  },
+  menuTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  menuOption: {
+    minHeight: 46,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  menuOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
   },
   title: {
     fontSize: 28,

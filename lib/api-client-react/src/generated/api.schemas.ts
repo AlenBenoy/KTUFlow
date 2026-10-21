@@ -373,6 +373,14 @@ export interface MaterialsResponse {
   sources: string[];
 }
 
+export type SyncResultsBody = {
+  /**
+     * @minimum 1
+     * @maximum 8
+     */
+  semester: number;
+};
+
 export type GetAnnouncementsParams = {
 limit?: number;
 category?: GetAnnouncementsCategory;

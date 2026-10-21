@@ -10,15 +10,14 @@ import { getCredentials } from "./profile.js";
 const router = Router();
 
 const KTU_BASE = "https://app.ktu.edu.in";
-const LOGIN_URL = `${KTU_BASE}/eu/bms/userLogin.htm`;
-const RESULTS_URL = `${KTU_BASE}/eu/stu/viewResults.htm`;
+const RESULTS_URL = `${KTU_BASE}/eu/res/semesterGradeCardListing.htm`;
 
 // Grade → gradePoint map (KTU 2024)
 const GRADE_POINTS: Record<string, number> = {
   S: 10, "A+": 9, A: 8.5, "B+": 8, B: 7, "C+": 6, C: 5, D: 4, F: 0, FE: 0, I: 0, W: 0,
 };
 
-async function fetchKtuResults(registerNumber: string, password: string) {
+async function fetchKtuResults(registerNumber: string, password: string, semester: number) {
   const cookieJar = new Map<string, string>();
   const rememberCookies = (setCookies: string[] | undefined) => {
     for (const raw of setCookies ?? []) {
@@ -85,7 +84,7 @@ async function fetchKtuResults(registerNumber: string, password: string) {
     throw new Error("KTU rejected the supplied credentials");
   }
 
-  // Step 3: Fetch results page
+  // Step 3: Load the semester grade-card search page, then submit its form.
   let resultsPage = await request(RESULTS_URL);
   if (resultsPage.status >= 300 && resultsPage.headers.location) {
     const target = new URL(resultsPage.headers.location, KTU_BASE).pathname;
@@ -96,14 +95,44 @@ async function fetchKtuResults(registerNumber: string, password: string) {
     throw new Error("KTU session was not authenticated");
   }
 
-  const parsed = parseResultsHtml(resultsPage.data as string);
+  const $results = cheerio.load(resultsPage.data as string);
+  const searchForm = $results("#semesterGradeCardListingSearchForm").length > 0
+    ? $results("#semesterGradeCardListingSearchForm").first()
+    : $results("form").filter((_index, form) =>
+      $results(form).find('select[name="semesterId"]').length > 0).first();
+  const searchAction = searchForm.attr("action") || RESULTS_URL;
+  const searchPath = new URL(searchAction, KTU_BASE).pathname;
+  const stdId = ($results('input[name="stdId"]').val() as string | undefined) ?? "";
+  const searchParams = new URLSearchParams({
+    semesterId: String(semester),
+    stdId,
+    search: "Search",
+  });
+  const searchResponse = await request(searchPath, {
+    method: (searchForm.attr("method") || "post").toUpperCase(),
+    data: searchParams.toString(),
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Referer: RESULTS_URL,
+    },
+  });
+  if (searchResponse.status >= 300 && searchResponse.headers.location) {
+    const target = new URL(searchResponse.headers.location, KTU_BASE).pathname;
+    if (/login/i.test(target)) throw new Error("KTU session was not authenticated");
+    searchResponse.data = (await request(target)).data;
+  }
+  if (/name=["']loginform["']/i.test(String(searchResponse.data))) {
+    throw new Error("KTU session was not authenticated");
+  }
+
+  const parsed = parseResultsHtml(searchResponse.data as string, semester);
   if (parsed.length === 0) {
     throw new Error("KTU results page contained no readable rows");
   }
   return parsed;
 }
 
-function parseResultsHtml(html: string) {
+function parseResultsHtml(html: string, requestedSemester: number) {
   const $ = cheerio.load(html);
   const semesters: Array<{
     semester: number;
@@ -143,7 +172,7 @@ function parseResultsHtml(html: string) {
 
     const sectionText = $(table).parent().text() + " " + $(table).prevAll().slice(0, 3).text();
     const semesterMatch = sectionText.match(/semester\s*[-:]?\s*(\d+)/i);
-    const semesterNum = semesterMatch ? Number(semesterMatch[1]) : semesters.length + 1;
+    const semesterNum = semesterMatch ? Number(semesterMatch[1]) : requestedSemester;
 
     rows.slice(1).each((_j, row) => {
       const cells = $(row).find("td").toArray();
@@ -226,12 +255,38 @@ router.post("/results/sync", async (req, res) => {
       return;
     }
 
+    const requestedSemester = Number(req.body?.semester ?? 1);
+    if (!Number.isInteger(requestedSemester) || requestedSemester < 1 || requestedSemester > 8) {
+      res.status(400).json({ error: "validation_error", message: "semester must be an integer from 1 to 8" });
+      return;
+    }
+
     let semesters;
     try {
-      semesters = await fetchKtuResults(creds.registerNumber, creds.ktuPassword);
+      try {
+        semesters = await fetchKtuResults(creds.registerNumber, creds.ktuPassword, requestedSemester);
+      } catch (firstError) {
+        // A pasted password can accidentally include surrounding whitespace.
+        // Try the normalized value only after the exact stored credential fails.
+        const normalizedPassword = creds.ktuPassword.trim();
+        if (normalizedPassword === creds.ktuPassword) throw firstError;
+        semesters = await fetchKtuResults(creds.registerNumber, normalizedPassword, requestedSemester);
+      }
       semesters = computeGpa(semesters);
     } catch (scrapeErr) {
-      req.log.warn({ scrapeErr }, "KTU portal scrape failed");
+      const portalError = scrapeErr as { message?: string; code?: string; response?: { status?: number } };
+      req.log.warn({
+        message: portalError.message,
+        code: portalError.code,
+        status: portalError.response?.status,
+      }, "KTU portal scrape failed");
+      if (portalError.message && /rejected|not authenticated/i.test(portalError.message)) {
+        res.status(401).json({
+          error: "ktu_auth_failed",
+          message: "KTU rejected the stored ID or password. Update your KTU credentials and try again.",
+        });
+        return;
+      }
       res.status(502).json({
         error: "portal_unavailable",
         message: "KTU results could not be fetched. No sample results were used.",

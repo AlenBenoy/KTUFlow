@@ -39,6 +39,7 @@ import type {
   ProfileInput,
   ResultsResponse,
   SuccessResponse,
+  SyncResultsBody,
   Todo,
   TodoInput,
   TodoUpdate,
@@ -456,14 +457,14 @@ export const getSyncResultsUrl = () => {
 /**
  * @summary Fetch fresh results from KTU portal using stored credentials
  */
-export const syncResults = async ( options?: RequestInit): Promise<ResultsResponse> => {
+export const syncResults = async (syncResultsBody: SyncResultsBody, options?: RequestInit): Promise<ResultsResponse> => {
 
   return customFetch<ResultsResponse>(getSyncResultsUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(syncResultsBody)
   }
 );}
 
@@ -472,8 +473,8 @@ export const syncResults = async ( options?: RequestInit): Promise<ResultsRespon
 
 
 export const getSyncResultsMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncResults>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof syncResults>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncResults>>, TError,{data: BodyType<SyncResultsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncResults>>, TError,{data: BodyType<SyncResultsBody>}, TContext> => {
 
 const mutationKey = ['syncResults'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -485,10 +486,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncResults>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncResults>>, {data: BodyType<SyncResultsBody>}> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  syncResults(requestOptions)
+          return  syncResults(data,requestOptions)
         }
 
 
@@ -499,18 +500,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type SyncResultsMutationResult = NonNullable<Awaited<ReturnType<typeof syncResults>>>
-
+    export type SyncResultsMutationBody = BodyType<SyncResultsBody>
     export type SyncResultsMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Fetch fresh results from KTU portal using stored credentials
  */
 export const useSyncResults = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncResults>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncResults>>, TError,{data: BodyType<SyncResultsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof syncResults>>,
         TError,
-        void,
+        {data: BodyType<SyncResultsBody>},
         TContext
       > => {
       return useMutation(getSyncResultsMutationOptions(options));

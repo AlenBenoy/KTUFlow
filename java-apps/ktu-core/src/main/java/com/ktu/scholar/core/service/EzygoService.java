@@ -98,8 +98,8 @@ public class EzygoService {
             SubjectAttendance sa = new SubjectAttendance();
             sa.setSubjectCode(getString(s, "subjectCode", "code", "subject_code", ""));
             sa.setSubjectName(getString(s, "subjectName", "name", "subject_name", "Unknown"));
-            sa.setTotalClasses(getInt(s, "totalClasses", "total", "total_classes", 0));
-            sa.setAttendedClasses(getInt(s, "attendedClasses", "attended", "attended_classes", 0));
+            sa.setTotalClasses(getInt(s, "totalClasses", "total", "total_classes"));
+            sa.setAttendedClasses(getInt(s, "attendedClasses", "attended", "attended_classes"));
             list.add(AttendanceAnalysisService.analyse(sa));
         }
         if (list.stream().anyMatch(s -> s.getSubjectCode().isBlank()

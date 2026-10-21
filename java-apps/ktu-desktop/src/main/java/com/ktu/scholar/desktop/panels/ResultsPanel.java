@@ -5,22 +5,25 @@ import com.ktu.scholar.core.model.*;
 import com.ktu.scholar.core.service.*;
 
 import javax.swing.*;
-import javax.swing.table.*;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Displays semester-wise KTU results in an expandable accordion-style layout.
- * Shows CGPA as a hero metric at the top. Each semester row expands to a
- * subject table with grade badges.
+ * Displays semester-wise KTU results with a semester selection dropdown.
+ * Shows CGPA / SGPA as hero metrics at the top.
  */
 public class ResultsPanel extends BasePanel {
 
     private final DatabaseHelper db;
+    private JLabel cgpaHeroTitle;
     private JLabel cgpaHero;
     private JLabel percentageLabel;
     private JLabel classLabel;
     private JPanel semestersPanel;
+    private JComboBox<String> semesterSelector;
+
+    private List<SemesterResult> cachedSemesters = new ArrayList<>();
 
     public ResultsPanel(DatabaseHelper db) {
         super("Academic Results");
@@ -33,9 +36,36 @@ public class ResultsPanel extends BasePanel {
         JPanel body = getBodyPanel();
         body.setLayout(new BorderLayout(0, 20));
 
+        // ── Top controls (Semester Dropdown + Sync) ────────────────────
+        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        topBar.setOpaque(false);
+
+        JLabel selectLbl = new JLabel("Select Semester:");
+        selectLbl.setFont(BODY_FONT);
+        selectLbl.setForeground(MUTED);
+
+        semesterSelector = new JComboBox<>(new String[]{"All Semesters"});
+        semesterSelector.setFont(BODY_FONT);
+        semesterSelector.setBackground(new Color(0x1E3A5F));
+        semesterSelector.setForeground(FG);
+        semesterSelector.setPreferredSize(new Dimension(160, 36));
+        semesterSelector.addActionListener(e -> applyFilter());
+
+        topBar.add(selectLbl);
+        topBar.add(semesterSelector);
+
+        JButton syncBtn = createPrimaryButton("Sync from KTU Portal");
+        syncBtn.setPreferredSize(new Dimension(180, 36));
+        syncBtn.addActionListener(e -> syncResults());
+
+        addToHeader(topBar);
+        addToHeader(syncBtn);
+
         // ── Hero metrics row ──────────────────────────────────────────
         JPanel heroes = new JPanel(new GridLayout(1, 3, 16, 0));
         heroes.setOpaque(false);
+
+        cgpaHeroTitle = new JLabel("CGPA", SwingConstants.CENTER);
 
         cgpaHero = new JLabel("–.––", SwingConstants.CENTER);
         cgpaHero.setFont(new Font("Segoe UI", Font.BOLD, 48));
@@ -49,11 +79,11 @@ public class ResultsPanel extends BasePanel {
         classLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
         classLabel.setForeground(FG);
 
-        heroes.add(createCard("CGPA",       cgpaHero));
+        heroes.add(createCard("CGPA / SGPA", cgpaHero));
         heroes.add(createCard("Percentage", percentageLabel));
         heroes.add(createCard("Classification", classLabel));
 
-        // ── Semester accordion ────────────────────────────────────────
+        // ── Semester accordion panel ──────────────────────────────────
         semestersPanel = new JPanel();
         semestersPanel.setLayout(new BoxLayout(semestersPanel, BoxLayout.Y_AXIS));
         semestersPanel.setOpaque(false);
@@ -63,11 +93,6 @@ public class ResultsPanel extends BasePanel {
 
         body.add(heroes, BorderLayout.NORTH);
         body.add(scroll, BorderLayout.CENTER);
-
-        // Sync button
-        JButton syncBtn = createPrimaryButton("Sync from KTU Portal");
-        syncBtn.addActionListener(e -> syncResults());
-        addToHeader(syncBtn);
     }
 
     private void loadFromCache() {
@@ -82,8 +107,11 @@ public class ResultsPanel extends BasePanel {
             protected void done() {
                 try {
                     List<SemesterResult> sems = get();
-                    if (sems != null && !sems.isEmpty()) renderSemesters(sems);
-                    else showEmptyState();
+                    if (sems != null && !sems.isEmpty()) {
+                        updateData(sems);
+                    } else {
+                        showEmptyState();
+                    }
                 } catch (Exception ignored) { showEmptyState(); }
             }
         };
@@ -107,7 +135,7 @@ public class ResultsPanel extends BasePanel {
             @Override
             protected void done() {
                 setLoading(false);
-                try { renderSemesters(get()); }
+                try { updateData(get()); }
                 catch (Exception e) {
                     JOptionPane.showMessageDialog(ResultsPanel.this,
                             e.getMessage(), "Sync Failed", JOptionPane.WARNING_MESSAGE);
@@ -117,10 +145,41 @@ public class ResultsPanel extends BasePanel {
         worker.execute();
     }
 
-    private void renderSemesters(List<SemesterResult> semesters) {
-        // Compute CGPA
+    private void updateData(List<SemesterResult> sems) {
+        this.cachedSemesters = sems != null ? sems : new ArrayList<>();
+
+        // Update dropdown options
+        semesterSelector.removeAllItems();
+        semesterSelector.addItem("All Semesters");
+        for (SemesterResult sem : cachedSemesters) {
+            semesterSelector.addItem("Semester " + sem.getSemester());
+        }
+
+        applyFilter();
+    }
+
+    private void applyFilter() {
+        if (cachedSemesters.isEmpty()) {
+            showEmptyState();
+            return;
+        }
+
+        String selected = (String) semesterSelector.getSelectedItem();
+        if (selected == null || selected.equals("All Semesters")) {
+            renderAllSemesters();
+        } else {
+            try {
+                int semNum = Integer.parseInt(selected.replace("Semester ", "").trim());
+                renderSingleSemester(semNum);
+            } catch (Exception e) {
+                renderAllSemesters();
+            }
+        }
+    }
+
+    private void renderAllSemesters() {
         double totalPoints = 0, totalCredits = 0;
-        for (SemesterResult sem : semesters) {
+        for (SemesterResult sem : cachedSemesters) {
             for (SubjectResult s : sem.getSubjects()) {
                 totalPoints  += s.getCredits() * s.getGradePoint();
                 totalCredits += s.getCredits();
@@ -135,15 +194,43 @@ public class ResultsPanel extends BasePanel {
         classLabel.setText(cls);
 
         semestersPanel.removeAll();
-        for (SemesterResult sem : semesters) {
-            semestersPanel.add(createSemesterAccordion(sem));
+        for (SemesterResult sem : cachedSemesters) {
+            semestersPanel.add(createSemesterAccordion(sem, false));
             semestersPanel.add(Box.createRigidArea(new Dimension(0, 8)));
         }
         semestersPanel.revalidate();
         semestersPanel.repaint();
     }
 
-    private JPanel createSemesterAccordion(SemesterResult sem) {
+    private void renderSingleSemester(int semNum) {
+        SemesterResult target = null;
+        for (SemesterResult sem : cachedSemesters) {
+            if (sem.getSemester() == semNum) {
+                target = sem;
+                break;
+            }
+        }
+
+        if (target == null) {
+            renderAllSemesters();
+            return;
+        }
+
+        double sgpa = target.getSgpa();
+        double pct  = Math.max(0, Math.round((sgpa - 0.5) * 10 * 100) / 100.0);
+        String cls  = GradeCalculatorService.classify(sgpa);
+
+        cgpaHero.setText(String.format("%.2f", sgpa));
+        percentageLabel.setText(String.format("%.1f%%", pct));
+        classLabel.setText(cls);
+
+        semestersPanel.removeAll();
+        semestersPanel.add(createSemesterAccordion(target, true));
+        semestersPanel.revalidate();
+        semestersPanel.repaint();
+    }
+
+    private JPanel createSemesterAccordion(SemesterResult sem, boolean forceExpanded) {
         JPanel wrapper = new JPanel();
         wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
         wrapper.setBackground(CARD_BG);
@@ -152,7 +239,6 @@ public class ResultsPanel extends BasePanel {
                 BorderFactory.createEmptyBorder(0, 0, 0, 0)));
         wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
-        // Header row (clickable)
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(CARD_BG);
         header.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
@@ -166,17 +252,16 @@ public class ResultsPanel extends BasePanel {
         sgpaLabel.setFont(BODY_FONT);
         sgpaLabel.setForeground(ACCENT);
 
-        JLabel toggle = new JLabel("▼");
+        JLabel toggle = new JLabel(forceExpanded ? "▲" : "▼");
         toggle.setForeground(MUTED);
 
         header.add(semLabel, BorderLayout.WEST);
         header.add(sgpaLabel, BorderLayout.CENTER);
         header.add(toggle, BorderLayout.EAST);
 
-        // Subject table (hidden by default)
         JTable table = buildSubjectTable(sem.getSubjects());
         JScrollPane tableScroll = new JScrollPane(table);
-        tableScroll.setVisible(false);
+        tableScroll.setVisible(forceExpanded);
         tableScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 300));
 
         header.addMouseListener(new java.awt.event.MouseAdapter() {

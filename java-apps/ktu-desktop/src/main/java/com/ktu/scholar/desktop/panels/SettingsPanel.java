@@ -10,6 +10,7 @@ import java.awt.*;
 public class SettingsPanel extends BasePanel {
 
     private final DatabaseHelper db;
+    private final Runnable onLogout;
 
     private JTextField regNumField, nameField, emailField, dobField,
                        branchField, collegeField;
@@ -17,8 +18,13 @@ public class SettingsPanel extends BasePanel {
     private JPasswordField ktuPassField, ezygoPassField;
 
     public SettingsPanel(DatabaseHelper db) {
+        this(db, null);
+    }
+
+    public SettingsPanel(DatabaseHelper db, Runnable onLogout) {
         super("Settings");
         this.db = db;
+        this.onLogout = onLogout;
         buildContent();
         loadProfile();
     }
@@ -78,11 +84,28 @@ public class SettingsPanel extends BasePanel {
         styleScrollPane(scroll);
 
         JButton saveBtn = createPrimaryButton("Save Profile");
-        saveBtn.setPreferredSize(new Dimension(200, 44));
+        saveBtn.setPreferredSize(new Dimension(160, 44));
         saveBtn.addActionListener(e -> saveProfile());
 
-        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton logoutBtn = new JButton("Log Out");
+        logoutBtn.setBackground(DANGER);
+        logoutBtn.setForeground(Color.WHITE);
+        logoutBtn.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        logoutBtn.setBorderPainted(false);
+        logoutBtn.setFocusPainted(false);
+        logoutBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        logoutBtn.setPreferredSize(new Dimension(120, 44));
+        logoutBtn.addActionListener(e -> {
+            if (onLogout != null) {
+                onLogout.run();
+            }
+        });
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
         btnPanel.setOpaque(false);
+        if (onLogout != null) {
+            btnPanel.add(logoutBtn);
+        }
         btnPanel.add(saveBtn);
 
         body.add(scroll,   BorderLayout.CENTER);
@@ -112,7 +135,6 @@ public class SettingsPanel extends BasePanel {
         branchField.setText(p.getBranch());
         collegeField.setText(p.getCollege());
         semesterSpinner.setValue(Math.max(1, p.getSemester()));
-        // Don't fill passwords — user re-enters only if changing
     }
 
     private void saveProfile() {

@@ -5,6 +5,27 @@ import { eq } from "drizzle-orm";
 
 const router = Router();
 
+const DEFAULT_BLOCKED_APPS = [
+  "YouTube",
+  "Instagram",
+  "Facebook",
+  "Snapchat",
+  "Netflix",
+  "JioHotstar",
+  "ZEE5",
+  "SonyLIV",
+];
+const DEFAULT_BLOCKED_WEBSITES = [
+  "youtube.com",
+  "instagram.com",
+  "facebook.com",
+  "netflix.com",
+  "snapchat.com",
+  "jiohotstar.com",
+  "zee5.com",
+  "sonyliv.com",
+];
+
 // GET /api/focus
 router.get("/focus", async (req, res) => {
   try {
@@ -14,8 +35,8 @@ router.get("/focus", async (req, res) => {
       res.json({
         enabled: false,
         cooldownMinutes: 30,
-        blockedApps: [],
-        blockedWebsites: [],
+        blockedApps: DEFAULT_BLOCKED_APPS,
+        blockedWebsites: DEFAULT_BLOCKED_WEBSITES,
         sessionDurationMinutes: 60,
       });
       return;
@@ -74,8 +95,8 @@ router.put("/focus", async (req, res) => {
         id: "singleton",
         enabled: enabled !== undefined ? String(enabled) : "false",
         cooldownMinutes: cooldownMinutes !== undefined ? String(cooldownMinutes) : "30",
-        blockedApps: blockedApps ?? [],
-        blockedWebsites: blockedWebsites ?? [],
+        blockedApps: blockedApps ?? DEFAULT_BLOCKED_APPS,
+        blockedWebsites: blockedWebsites ?? DEFAULT_BLOCKED_WEBSITES,
         sessionDurationMinutes:
           sessionDurationMinutes !== undefined ? String(sessionDurationMinutes) : "60",
         updatedAt: now,
