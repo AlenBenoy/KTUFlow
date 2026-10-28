@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * First-run wizard — collects student details in 3 steps:
- *  Step 1: Basic info (name, register number, DOB, branch, semester, college)
+ *  Step 1: Basic info (name, register number, EzyGo ID, email ID, DOB, branch, semester, college)
  *  Step 2: KTU portal credentials (optional)
  *  Step 3: EzyGo credentials (optional) + option to add a Desktop shortcut
  */
@@ -35,7 +35,8 @@ public class OnboardingDialog extends JDialog {
     private int currentStep = 0;
 
     // Step 1 fields
-    private JTextField nameField, regNumField, dobField, branchField, collegeField;
+    private JTextField nameField, regNumField, ezygoIdField, emailField,
+            dobField, branchField, collegeField;
     private JSpinner semesterSpinner;
 
     // Step 2 fields
@@ -52,7 +53,7 @@ public class OnboardingDialog extends JDialog {
     public OnboardingDialog(Frame parent, DatabaseHelper db) {
         super(parent, "Welcome to KTU Scholar — Setup", true);
         this.db = db;
-        setSize(560, 540);
+        setSize(560, 680);
         setResizable(false);
         setLocationRelativeTo(parent);
         getContentPane().setBackground(BG);
@@ -80,7 +81,7 @@ public class OnboardingDialog extends JDialog {
 
         // ── Cards ─────────────────────────────────────────────────────
         cardPanel.setBackground(BG);
-        cardPanel.add(buildStep1(), "1");
+        cardPanel.add(wrapInScroll(buildStep1()), "1");
         cardPanel.add(buildStep2(), "2");
         cardPanel.add(buildStep3(), "3");
 
@@ -116,12 +117,26 @@ public class OnboardingDialog extends JDialog {
         add(footer,    BorderLayout.SOUTH);
     }
 
+    /** Step 1 has many fields, so it is wrapped in a scroll pane (dark themed). */
+    private JScrollPane wrapInScroll(JPanel content) {
+        JScrollPane sp = new JScrollPane(content,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setBorder(BorderFactory.createEmptyBorder());
+        sp.getViewport().setBackground(BG);
+        sp.setBackground(BG);
+        sp.getVerticalScrollBar().setUnitIncrement(16);
+        return sp;
+    }
+
     private JPanel buildStep1() {
         JPanel p = step("1.  Your Details",
                 "Let us know who you are. This information is only stored locally.");
 
         nameField      = addField(p, "Full Name *");
-        regNumField    = addField(p, "KTU Register Number *");
+        regNumField    = addField(p, "KTU Register Number (KTU ID) *");
+        ezygoIdField   = addField(p, "EzyGo ID");
+        emailField     = addField(p, "Email ID");
         dobField       = addField(p, "Date of Birth (yyyy-MM-dd)");
         branchField    = addField(p, "Branch (e.g. CSE, ECE, ME)");
         semesterSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 8, 1));
@@ -144,6 +159,7 @@ public class OnboardingDialog extends JDialog {
                 "If you skip this, sample results will be shown instead." +
                 "</body></html>");
         note.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
+        note.setAlignmentX(Component.LEFT_ALIGNMENT);
         p.add(note);
         return p;
     }
@@ -156,14 +172,14 @@ public class OnboardingDialog extends JDialog {
         addLabeledComp(p, "EzyGo Password", ezygoPassField);
 
         JLabel note = new JLabel("<html><body style='width:380px;color:#8BA3C7'>" +
-                "Your register number is used as the EzyGo username too. " +
+                "Your EzyGo ID from Step 1 is used as the EzyGo username. " +
                 "All credentials are encrypted with AES-256-GCM before being saved." +
                 "</body></html>");
         note.setBorder(BorderFactory.createEmptyBorder(0, 0, 16, 0));
         note.setAlignmentX(Component.LEFT_ALIGNMENT);
         p.add(note);
 
-        // NEW: desktop shortcut option
+        // Desktop shortcut option
         shortcutCheck = new JCheckBox("Add a KTU Scholar shortcut to my Desktop", true);
         shortcutCheck.setOpaque(false);
         shortcutCheck.setForeground(FG);
@@ -200,6 +216,11 @@ public class OnboardingDialog extends JDialog {
             JOptionPane.showMessageDialog(this, "Register Number is required.");
             return false;
         }
+        String email = emailField.getText().trim();
+        if (!email.isEmpty() && !email.matches("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$")) {
+            JOptionPane.showMessageDialog(this, "Please enter a valid Email ID (or leave it blank).");
+            return false;
+        }
         return true;
     }
 
@@ -207,6 +228,8 @@ public class OnboardingDialog extends JDialog {
         Profile p = new Profile();
         p.setName(nameField.getText().trim());
         p.setRegisterNumber(regNumField.getText().trim());
+        p.setEzygoId(ezygoIdField.getText().trim());   // NEW – add to Profile
+        p.setEmail(emailField.getText().trim());       // NEW – add to Profile
         p.setDateOfBirth(dobField.getText().trim());
         p.setBranch(branchField.getText().trim());
         p.setSemester((int) semesterSpinner.getValue());
