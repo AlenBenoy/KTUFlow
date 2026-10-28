@@ -6,6 +6,7 @@ import com.ktu.scholar.core.model.Profile;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Arrays;
 
 /**
  * First-run wizard — collects student details in 3 steps:
@@ -187,7 +188,6 @@ public class OnboardingDialog extends JDialog {
 
     private void finish() {
         Profile p = new Profile();
-        p.setName(regNumField.getText().trim());
         p.setName(nameField.getText().trim());
         p.setRegisterNumber(regNumField.getText().trim());
         p.setDateOfBirth(dobField.getText().trim());
@@ -195,10 +195,10 @@ public class OnboardingDialog extends JDialog {
         p.setSemester((int) semesterSpinner.getValue());
         p.setCollege(collegeField.getText().trim());
 
-        char[] ktu = ktuPassField.getPassword();
-        if (ktu.length > 0) p.setKtuPassword(new String(ktu));
-        char[] ezygo = ezygoPassField.getPassword();
-        if (ezygo.length > 0) p.setEzygoPassword(new String(ezygo));
+        String ktu = readPassword(ktuPassField);
+        if (ktu != null) p.setKtuPassword(ktu);
+        String ezygo = readPassword(ezygoPassField);
+        if (ezygo != null) p.setEzygoPassword(ezygo);
 
         try {
             new ProfileRepository(db.getConnection()).saveProfile(p);
@@ -209,6 +209,15 @@ public class OnboardingDialog extends JDialog {
     }
 
     // ── Builder helpers ───────────────────────────────────────────────────
+
+    private static String readPassword(JPasswordField field) {
+        char[] value = field.getPassword();
+        try {
+            return value.length == 0 ? null : new String(value);
+        } finally {
+            Arrays.fill(value, '\0');
+        }
+    }
 
     private JPanel step(String title, String subtitle) {
         JPanel p = new JPanel();

@@ -61,12 +61,14 @@ public class DatabaseHelper {
                     branch            TEXT,
                     semester          INTEGER DEFAULT 1,
                     college           TEXT,
+                    ezygo_id          TEXT,
                     ktu_password_enc  TEXT,
                     ezygo_password_enc TEXT,
                     created_at        TEXT NOT NULL,
                     updated_at        TEXT NOT NULL
                 )
             """);
+            ensureProfileColumn("ezygo_id", "TEXT");
 
             // To-Do list
             stmt.execute("""
@@ -132,6 +134,16 @@ public class DatabaseHelper {
             """);
 
             log.info("All tables verified/created");
+        }
+    }
+
+    private void ensureProfileColumn(String columnName, String columnType) throws SQLException {
+        try (java.sql.ResultSet rs = connection.getMetaData().getColumns(null, null, "profiles", columnName)) {
+            if (!rs.next()) {
+                try (Statement stmt = connection.createStatement()) {
+                    stmt.execute("ALTER TABLE profiles ADD COLUMN " + columnName + " " + columnType);
+                }
+            }
         }
     }
 

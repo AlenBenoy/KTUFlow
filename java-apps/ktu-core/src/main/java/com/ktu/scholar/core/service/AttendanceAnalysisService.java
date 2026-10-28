@@ -36,14 +36,12 @@ public class AttendanceAnalysisService {
 
         // Status classification
         AttendanceStatus status;
-        if (pct >= 85) {
+        if (pct >= MINIMUM_ATTENDANCE) {
             status = AttendanceStatus.SAFE;
-        } else if (pct >= MINIMUM_ATTENDANCE) {
-            status = AttendanceStatus.WARNING;  // safe but getting close
         } else if (pct >= CONDONATION_MIN) {
-            status = AttendanceStatus.DANGER;   // below 75%, not yet in condonation range
-        } else {
             status = AttendanceStatus.CONDONATION;
+        } else {
+            status = AttendanceStatus.DANGER;
         }
         s.setStatus(status);
 
@@ -97,16 +95,16 @@ public class AttendanceAnalysisService {
                 else
                     yield "You are exactly at 75%. Do not miss any more classes.";
             }
+            case CONDONATION ->
+                String.format("Attendance is %.1f%% — eligible for condonation. "
+                    + "You need %d more class(es) or valid documentation to stay within the allowed range.",
+                    s.getPercentage(), Math.max(0, s.getClassesNeeded()));
+            case DANGER ->
+                String.format("Critically low at %.1f%%. You must attend the next %d class(es) "
+                    + "consecutively to reach the minimum.", s.getPercentage(), s.getClassesNeeded());
             case WARNING ->
                 String.format("Attendance is %.1f%% — just above 75%%. Attend regularly. "
                     + "You can only skip %d more class(es).", s.getPercentage(), s.getClassesCanSkip());
-            case DANGER ->
-                String.format("Below 75%%! Current: %.1f%%. You must attend the next %d class(es) "
-                    + "consecutively to reach the minimum.", s.getPercentage(), s.getClassesNeeded());
-            case CONDONATION ->
-                String.format("Critically low at %.1f%%. You are eligible to apply for condonation "
-                    + "(requires 60–74%% and a valid documented reason). See steps below.",
-                    s.getPercentage());
         };
     }
 

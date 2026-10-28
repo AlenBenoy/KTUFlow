@@ -13,6 +13,7 @@ public class Profile {
     private String branch;
     private int semester;
     private String college;
+    private String ezygoId;
     // Held in memory as plaintext; persisted encrypted
     private String ktuPassword;
     private String ezygoPassword;
@@ -44,6 +45,9 @@ public class Profile {
 
     public String getCollege() { return college; }
     public void setCollege(String college) { this.college = college; }
+
+    public String getEzygoId() { return ezygoId; }
+    public void setEzygoId(String ezygoId) { this.ezygoId = ezygoId; }
 
     public String getKtuPassword() { return ktuPassword; }
     public void setKtuPassword(String ktuPassword) { this.ktuPassword = ktuPassword; }

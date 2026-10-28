@@ -4,18 +4,32 @@ import com.ktu.scholar.core.db.*;
 import com.ktu.scholar.core.model.Profile;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
+import java.util.Arrays;
+import java.util.regex.Pattern;
 
 /** Profile / settings editor. */
 public class SettingsPanel extends BasePanel {
 
     private final DatabaseHelper db;
     private final Runnable onLogout;
+    private final Runnable profileChangeListener;
 
-    private JTextField regNumField, nameField, emailField, dobField,
+    private JTextField regNumField, ezygoIdField, nameField, emailField, dobField,
                        branchField, collegeField;
     private JSpinner semesterSpinner;
     private JPasswordField ktuPassField, ezygoPassField;
+    private boolean profileLoaded;
+    private boolean updatingProfileFields;
+    private boolean ezygoIdDirty;
+    private boolean emailDirty;
+    private boolean listeningForProfileChanges;
+    private long profileLoadGeneration;
+
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     public SettingsPanel(DatabaseHelper db) {
         this(db, null);
@@ -25,8 +39,28 @@ public class SettingsPanel extends BasePanel {
         super("Settings");
         this.db = db;
         this.onLogout = onLogout;
+        this.profileChangeListener =
+                () -> SwingUtilities.invokeLater(this::refreshSharedProfileFields);
         buildContent();
         loadProfile();
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (!listeningForProfileChanges) {
+            ProfileRepository.addProfileChangeListener(profileChangeListener);
+            listeningForProfileChanges = true;
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        if (listeningForProfileChanges) {
+            ProfileRepository.removeProfileChangeListener(profileChangeListener);
+            listeningForProfileChanges = false;
+        }
+        super.removeNotify();
     }
 
     private void buildContent() {
@@ -39,15 +73,18 @@ public class SettingsPanel extends BasePanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(6, 0, 6, 12);
 
-        regNumField     = field(); nameField       = field();
-        emailField      = field(); dobField        = field();
-        branchField     = field(); collegeField    = field();
+        regNumField     = field(); ezygoIdField    = field();
+        nameField       = field(); emailField      = field();
+        dobField        = field(); branchField     = field();
+        collegeField    = field();
+        addSharedFieldListeners();
         semesterSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 8, 1));
         ktuPassField    = new JPasswordField(); styleField(ktuPassField);
         ezygoPassField  = new JPasswordField(); styleField(ezygoPassField);
 
         String[][] rows = {
             {"KTU Register Number", null},
+            {"EzyGo ID", null},
             {"Full Name", null},
             {"Email", null},
             {"Date of Birth (yyyy-MM-dd)", null},
@@ -58,7 +95,7 @@ public class SettingsPanel extends BasePanel {
             {"EzyGo Password", null},
         };
         JComponent[] components = {
-            regNumField, nameField, emailField, dobField,
+            regNumField, ezygoIdField, nameField, emailField, dobField,
             branchField, collegeField, semesterSpinner,
             ktuPassField, ezygoPassField
         };
@@ -113,33 +150,57 @@ public class SettingsPanel extends BasePanel {
     }
 
     private void loadProfile() {
+        long generation = ++profileLoadGeneration;
         SwingWorker<Profile, Void> worker = new SwingWorker<>() {
             @Override protected Profile doInBackground() throws Exception {
                 return new ProfileRepository(db.getConnection()).getProfile();
             }
             @Override protected void done() {
+                if (generation != profileLoadGeneration) return;
                 try {
                     Profile p = get();
                     if (p != null) populate(p);
-                } catch (Exception ignored) {}
+                    else profileLoaded = true;
+                } catch (Exception e) {
+                    profileLoaded = false;
+                    JOptionPane.showMessageDialog(SettingsPanel.this,
+                            "Could not load profile: " + e.getMessage(),
+                            "Profile Load Failed", JOptionPane.WARNING_MESSAGE);
+                }
             }
         };
         worker.execute();
     }
 
     private void populate(Profile p) {
+        updatingProfileFields = true;
         regNumField.setText(p.getRegisterNumber());
+        ezygoIdField.setText(p.getEzygoId());
         nameField.setText(p.getName());
         emailField.setText(p.getEmail());
         dobField.setText(p.getDateOfBirth());
         branchField.setText(p.getBranch());
         collegeField.setText(p.getCollege());
-        semesterSpinner.setValue(Math.max(1, p.getSemester()));
+        int semester = p.getSemester();
+        if (semester < 1) semester = 1;
+        else if (semester > 8) semester = 8;
+        semesterSpinner.setValue(semester);
+        ezygoIdDirty = false;
+        emailDirty = false;
+        updatingProfileFields = false;
+        profileLoaded = true;
     }
 
     private void saveProfile() {
+        if (!profileLoaded) {
+            JOptionPane.showMessageDialog(this, "Profile is still loading. Please try again.",
+                    "Profile Not Ready", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
         Profile p = new Profile();
         p.setRegisterNumber(regNumField.getText().trim());
+        p.setEzygoId(ezygoIdField.getText().trim());
         p.setName(nameField.getText().trim());
         p.setEmail(emailField.getText().trim());
         p.setDateOfBirth(dobField.getText().trim());
@@ -147,29 +208,124 @@ public class SettingsPanel extends BasePanel {
         p.setCollege(collegeField.getText().trim());
         p.setSemester((int) semesterSpinner.getValue());
 
-        char[] ktu = ktuPassField.getPassword();
-        if (ktu.length > 0) p.setKtuPassword(new String(ktu));
-        char[] ezygo = ezygoPassField.getPassword();
-        if (ezygo.length > 0) p.setEzygoPassword(new String(ezygo));
+        if (!isValidEmail(p.getEmail())) {
+            JOptionPane.showMessageDialog(this, "Enter a valid email address.",
+                    "Invalid Email", JOptionPane.WARNING_MESSAGE);
+            emailField.requestFocusInWindow();
+            return;
+        }
+
+        String ktu = readPassword(ktuPassField);
+        if (ktu != null) p.setKtuPassword(ktu);
+        String ezygo = readPassword(ezygoPassField);
+        if (ezygo != null) p.setEzygoPassword(ezygo);
+        boolean saveEzygoId = ezygoIdDirty;
+        boolean saveEmail = emailDirty;
 
         if (p.getRegisterNumber().isEmpty()) {
             JOptionPane.showMessageDialog(this, "Register number is required.");
             return;
         }
 
-        SwingWorker<Void, Void> worker = new SwingWorker<>() {
-            @Override protected Void doInBackground() throws Exception {
-                new ProfileRepository(db.getConnection()).saveProfile(p);
-                return null;
+        SwingWorker<Profile, Void> worker = new SwingWorker<>() {
+            @Override protected Profile doInBackground() throws Exception {
+                var connection = db.getConnection();
+                synchronized (connection) {
+                    ProfileRepository repository = new ProfileRepository(connection);
+                    Profile current = repository.getProfile();
+                    if (current != null) {
+                        if (!saveEzygoId) p.setEzygoId(current.getEzygoId());
+                        if (!saveEmail) p.setEmail(current.getEmail());
+                    }
+                    return repository.saveProfile(p);
+                }
             }
             @Override protected void done() {
-                ktuPassField.setText("");
-                ezygoPassField.setText("");
-                JOptionPane.showMessageDialog(SettingsPanel.this,
-                    "Profile saved successfully!", "Saved", JOptionPane.INFORMATION_MESSAGE);
+                try {
+                    get();
+                    ktuPassField.setText("");
+                    ezygoPassField.setText("");
+                    if (ezygoIdField.getText().trim().equals(p.getEzygoId())) {
+                        ezygoIdDirty = false;
+                    }
+                    if (emailField.getText().trim().equals(p.getEmail())) {
+                        emailDirty = false;
+                    }
+                    JOptionPane.showMessageDialog(SettingsPanel.this,
+                        "Profile saved successfully!", "Saved", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(SettingsPanel.this,
+                            "Could not save profile: " + e.getMessage(),
+                            "Save Failed", JOptionPane.WARNING_MESSAGE);
+                }
             }
         };
         worker.execute();
+    }
+
+    private void addSharedFieldListeners() {
+        ezygoIdField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { ezygoIdDirty = !updatingProfileFields; }
+            @Override public void removeUpdate(DocumentEvent e) { ezygoIdDirty = !updatingProfileFields; }
+            @Override public void changedUpdate(DocumentEvent e) { ezygoIdDirty = !updatingProfileFields; }
+        });
+        emailField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { emailDirty = !updatingProfileFields; }
+            @Override public void removeUpdate(DocumentEvent e) { emailDirty = !updatingProfileFields; }
+            @Override public void changedUpdate(DocumentEvent e) { emailDirty = !updatingProfileFields; }
+        });
+    }
+
+    private void refreshSharedProfileFields() {
+        long generation = ++profileLoadGeneration;
+        SwingWorker<Profile, Void> worker = new SwingWorker<>() {
+            @Override protected Profile doInBackground() throws Exception {
+                return new ProfileRepository(db.getConnection()).getProfile();
+            }
+
+            @Override protected void done() {
+                if (generation != profileLoadGeneration) return;
+                try {
+                    Profile p = get();
+                    if (p == null) {
+                        profileLoaded = true;
+                        return;
+                    }
+                    if (!profileLoaded) {
+                        populate(p);
+                        return;
+                    }
+                    updatingProfileFields = true;
+                    if (!ezygoIdDirty) {
+                        ezygoIdField.setText(p.getEzygoId());
+                    }
+                    if (!emailDirty) {
+                        emailField.setText(p.getEmail());
+                    }
+                    profileLoaded = true;
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(SettingsPanel.this,
+                            "Could not refresh profile fields: " + e.getMessage(),
+                            "Profile Refresh Failed", JOptionPane.WARNING_MESSAGE);
+                } finally {
+                    updatingProfileFields = false;
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private static boolean isValidEmail(String email) {
+        return email == null || email.isBlank() || EMAIL_PATTERN.matcher(email.trim()).matches();
+    }
+
+    private static String readPassword(JPasswordField field) {
+        char[] value = field.getPassword();
+        try {
+            return value.length == 0 ? null : new String(value);
+        } finally {
+            Arrays.fill(value, '\0');
+        }
     }
 
     private JTextField field() {
