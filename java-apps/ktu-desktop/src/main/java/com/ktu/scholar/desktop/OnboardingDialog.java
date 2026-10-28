@@ -6,21 +6,28 @@ import com.ktu.scholar.core.model.Profile;
 
 import javax.swing.*;
 import java.awt.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
 /**
  * First-run wizard — collects student details in 3 steps:
  *  Step 1: Basic info (name, register number, DOB, branch, semester, college)
  *  Step 2: KTU portal credentials (optional)
- *  Step 3: EzyGo credentials (optional)
+ *  Step 3: EzyGo credentials (optional) + option to add a Desktop shortcut
  */
 public class OnboardingDialog extends JDialog {
 
     private static final Color BG      = new Color(0x0A1628);
-    private static final Color CARD_BG = new Color(0x12213A);
     private static final Color BORDER  = new Color(0x1E3A5F);
     private static final Color ACCENT  = new Color(0xF59E0B);
     private static final Color FG      = new Color(0xF0F4FF);
     private static final Color MUTED   = new Color(0x8BA3C7);
+
+    private static final String SHORTCUT_NAME = "KTU Scholar";
 
     private final DatabaseHelper db;
     private final CardLayout cards = new CardLayout();
@@ -36,6 +43,7 @@ public class OnboardingDialog extends JDialog {
 
     // Step 3 fields
     private JPasswordField ezygoPassField;
+    private JCheckBox shortcutCheck;
 
     private JButton nextBtn;
     private JButton backBtn;
@@ -44,7 +52,7 @@ public class OnboardingDialog extends JDialog {
     public OnboardingDialog(Frame parent, DatabaseHelper db) {
         super(parent, "Welcome to KTU Scholar — Setup", true);
         this.db = db;
-        setSize(560, 520);
+        setSize(560, 540);
         setResizable(false);
         setLocationRelativeTo(parent);
         getContentPane().setBackground(BG);
@@ -112,14 +120,14 @@ public class OnboardingDialog extends JDialog {
         JPanel p = step("1.  Your Details",
                 "Let us know who you are. This information is only stored locally.");
 
-        nameField      = addField(p, "Full Name *", false);
-        regNumField    = addField(p, "KTU Register Number *", false);
-        dobField       = addField(p, "Date of Birth (yyyy-MM-dd)", false);
-        branchField    = addField(p, "Branch (e.g. CSE, ECE, ME)", false);
+        nameField      = addField(p, "Full Name *");
+        regNumField    = addField(p, "KTU Register Number *");
+        dobField       = addField(p, "Date of Birth (yyyy-MM-dd)");
+        branchField    = addField(p, "Branch (e.g. CSE, ECE, ME)");
         semesterSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 8, 1));
         styleSpinner(semesterSpinner);
         addLabeledComp(p, "Current Semester", semesterSpinner);
-        collegeField = addField(p, "College Name", false);
+        collegeField = addField(p, "College Name");
         return p;
     }
 
@@ -151,8 +159,18 @@ public class OnboardingDialog extends JDialog {
                 "Your register number is used as the EzyGo username too. " +
                 "All credentials are encrypted with AES-256-GCM before being saved." +
                 "</body></html>");
-        note.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
+        note.setBorder(BorderFactory.createEmptyBorder(0, 0, 16, 0));
+        note.setAlignmentX(Component.LEFT_ALIGNMENT);
         p.add(note);
+
+        // NEW: desktop shortcut option
+        shortcutCheck = new JCheckBox("Add a KTU Scholar shortcut to my Desktop", true);
+        shortcutCheck.setOpaque(false);
+        shortcutCheck.setForeground(FG);
+        shortcutCheck.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        shortcutCheck.setFocusPainted(false);
+        shortcutCheck.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.add(shortcutCheck);
         return p;
     }
 
@@ -187,7 +205,6 @@ public class OnboardingDialog extends JDialog {
 
     private void finish() {
         Profile p = new Profile();
-        p.setName(regNumField.getText().trim());
         p.setName(nameField.getText().trim());
         p.setRegisterNumber(regNumField.getText().trim());
         p.setDateOfBirth(dobField.getText().trim());
@@ -197,14 +214,101 @@ public class OnboardingDialog extends JDialog {
 
         char[] ktu = ktuPassField.getPassword();
         if (ktu.length > 0) p.setKtuPassword(new String(ktu));
+        Arrays.fill(ktu, '\0');
         char[] ezygo = ezygoPassField.getPassword();
         if (ezygo.length > 0) p.setEzygoPassword(new String(ezygo));
+        Arrays.fill(ezygo, '\0');
 
         try {
             new ProfileRepository(db.getConnection()).saveProfile(p);
-            dispose();
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Failed to save profile: " + e.getMessage());
+            return;
+        }
+
+        if (shortcutCheck.isSelected()) {
+            createShortcutAndGuide();
+        }
+        dispose();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Desktop shortcut (Windows)
+    //  Windows does not let apps pin themselves to the taskbar, so we create
+    //  a Desktop shortcut and tell the user to right-click -> Pin to taskbar.
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void createShortcutAndGuide() {
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        try {
+            Path lnk = createDesktopShortcut(SHORTCUT_NAME);
+            setCursor(Cursor.getDefaultCursor());
+            JOptionPane.showMessageDialog(this,
+                    "A \"" + SHORTCUT_NAME + "\" shortcut was added to your Desktop.\n\n" +
+                    "To pin it to the taskbar: right-click it and choose\n" +
+                    "\"Pin to taskbar\" (Windows 11: \"Show more options\" first).",
+                    "Shortcut created", JOptionPane.INFORMATION_MESSAGE);
+            try {   // highlight the shortcut in Explorer
+                new ProcessBuilder("explorer.exe", "/select,", lnk.toString()).start();
+            } catch (Exception ignored) { }
+        } catch (Exception e) {
+            setCursor(Cursor.getDefaultCursor());
+            JOptionPane.showMessageDialog(this,
+                    "Your profile was saved, but the Desktop shortcut could not be created:\n" +
+                    e.getMessage(),
+                    "Shortcut not created", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private static Path createDesktopShortcut(String shortcutName) throws Exception {
+        if (!System.getProperty("os.name", "").toLowerCase().contains("win")) {
+            throw new UnsupportedOperationException("Desktop shortcuts are only supported on Windows.");
+        }
+
+        // The jar this app is currently running from
+        Path jar = Paths.get(OnboardingDialog.class
+                .getProtectionDomain().getCodeSource().getLocation().toURI());
+        if (!Files.isRegularFile(jar) || !jar.toString().toLowerCase().endsWith(".jar")) {
+            throw new IllegalStateException(
+                    "The app is not running from a .jar (probably started from the IDE or Gradle), "
+                    + "so no shortcut was created.");
+        }
+
+        // javaw = launches without a console window
+        Path javaw = Paths.get(System.getProperty("java.home"), "bin", "javaw.exe");
+
+        // Temp PowerShell script; paths are passed as parameters to avoid quoting problems
+        String ps =
+                "param($Name,$Javaw,$Jar,$WorkDir)\r\n" +
+                "$desktop = [Environment]::GetFolderPath('Desktop')\r\n" +
+                "$lnk = Join-Path $desktop ($Name + '.lnk')\r\n" +
+                "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)\r\n" +
+                "$s.TargetPath = $Javaw\r\n" +
+                "$s.Arguments = '-jar \"' + $Jar + '\"'\r\n" +
+                "$s.WorkingDirectory = $WorkDir\r\n" +
+                "$s.IconLocation = $Javaw\r\n" +
+                "$s.Description = $Name\r\n" +
+                "$s.Save()\r\n" +
+                "Write-Output $lnk\r\n";
+
+        Path script = Files.createTempFile("ktu-shortcut", ".ps1");
+        try {
+            Files.write(script, ps.getBytes(StandardCharsets.UTF_8));
+
+            Process proc = new ProcessBuilder(
+                    "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                    "-File", script.toString(),
+                    shortcutName, javaw.toString(), jar.toString(), jar.getParent().toString())
+                    .redirectErrorStream(true)
+                    .start();
+
+            String output = new String(proc.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            if (!proc.waitFor(15, TimeUnit.SECONDS) || proc.exitValue() != 0) {
+                throw new IllegalStateException("PowerShell failed: " + output);
+            }
+            return Paths.get(output);
+        } finally {
+            Files.deleteIfExists(script);
         }
     }
 
@@ -232,7 +336,7 @@ public class OnboardingDialog extends JDialog {
         return p;
     }
 
-    private JTextField addField(JPanel parent, String label, boolean password) {
+    private JTextField addField(JPanel parent, String label) {
         JTextField f = new JTextField();
         styleField(f);
         addLabeledComp(parent, label, f);
